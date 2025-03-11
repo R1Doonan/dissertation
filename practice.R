@@ -19,8 +19,9 @@ var(yst_data$aphidius_colemani) # variance
 # trialling differnet models and assessing AIC
 nb_m1 <- glmmTMB(aphidius_colemani~con_rel * margin + (1 | sample_id) + (1 | set_no),
   family = nbinom2(),  # Variance = μ + μ²/θ
-  data = yst_data
+  data = yst_data)
+
 nb_m1 <- glmmTMB(aphidius_colemani~con_rel * margin + (1 | sample_id) + (1 | set_no),
                    family = nbinom2(),  # Variance = μ + μ²/θ
-                   data = yst_data
+                   data = yst_data)
 AICc(nb_m1)
