@@ -21,7 +21,7 @@ view(wfs_data)
 view(plot_wf_data)
 str(wasp_data)
 str(aphid_data)
-
+str(plot_wf_data)
 # cleaning (mutate to covert to factors)
 wasp_data <- wasp_data %>% 
   mutate(across(c(set_no, n_treatment, crop, margin, con_rel), as.factor))
@@ -76,7 +76,7 @@ merged_data <- inner_join(
 view(wasp_aggregated)
 str(wasp_aggregated)
 view(merged_data)
-# wildflower data wrangling ----
+# wildflower strip data wrangling ----
 
 
 # Convert Q1-Q10 columns to character
@@ -84,17 +84,48 @@ wfs_data <- wfs_data %>%
   mutate(across(starts_with("Q") & !ends_with("m_c_r"), as.character)) %>%
   mutate(across())
 
-wfs_long <- 
-  pivot_longer( data = wfs_data,
-    cols = -c(1:2),
-    names_to = c("quadrat", "m_c_r"),
-    names_pattern = "(Q\\d+)_?(m_c_r)?",
-    values_to = "help") %>%
-  rename(
-    braun_blanquet = Q,  # Rename automatically generated column
-    midpoint_cover = m_c_r)
-str(wfs_data)
+# create new column of quadrat braun-Blanquet scores
+wildflower_bb <- wfs_data %>%
+   select(`common name`, Species, starts_with("Q") & !ends_with("m_c_r")) %>%
+   pivot_longer(cols = -c(`common name`, Species),
+   names_to = "quadrat",
+   values_to = "braun_blanquet")
+
+# so the same for quadrat mid-point cover values
+
+wildflower_mc <- wfs_data %>%
+  select(`common name`, Species, ends_with("m_c_r")) %>%
+  pivot_longer(cols = -c(`common name`, Species),
+    names_to = "quadrat",
+    values_to = "midpoint_cover"
+    ) %>%
+  mutate(quadrat = gsub("_m_c_r", "", quadrat))
 
 
+# merge the two datasets
+wfs_long <- wildflower_bb %>%
+    left_join(wildflower_mc, by = c("common name", "Species", "quadrat"))
+view(wfs_long)
+str(wfs_long)
+
+# collate floral cover per wfs quadrat
+
+quadrat_metrics <- wfs_long %>%
+  group_by(quadrat) %>%
+  summarise(
+    total_cover = sum(midpoint_cover, na.rm = TRUE),  # Total cover per quadrat
+    shannon_div = diversity(midpoint_cover, index = "shannon")  # Diversity per quadrat
+  )
+view(quadrat_metrics)
+# in-plot wildflower data wrangling ----
+
+plot_wf_data <- plot_wf_data %>%
+  mutate(across(starts_with("p"), as.character)) %>%
+  mutate(across()) %>%
+  pivot_longer(cols = starts_with("P"),
+    names_to = "plot_position",
+    values_to = "braun_blanquet")
+
+view(plot_wf_data)
 
 
