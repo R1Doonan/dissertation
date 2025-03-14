@@ -104,7 +104,7 @@ wildflower_bb <- wfs_data %>%
    names_to = "quadrat",
    values_to = "braun_blanquet")
 
-# so the same for quadrat mid-point cover values
+# Do the same for mid-point cover values
 
 wildflower_mc <- wfs_data %>%
   select(`common name`, Species, ends_with("m_c_r")) %>%
