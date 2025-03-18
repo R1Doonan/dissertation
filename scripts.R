@@ -3,24 +3,24 @@
 # Workflows:
 # Clean and aggregate aphid data by plot - DONE
 # Clean and aggregate parasitoid wasp data - DONE
-# Merge dataasets - DONE
+# Merge data sets - DONE
 # Prepare wildflower strip data:
-      # Want to end up with a single metirc for diversity as a proxy value for nectar sources - IN PROGRESS
+      # Want to end up with a single metric for diversity as a proxy value for nectar sources - IN PROGRESS
       # Use distance from wildflower strip as an effect in model - TODO
 # Aggregate in-plot wildflower data:
-      # Assess homogeneity of wildflowers across the plots - IN PROGRESS
+      # Assess homogeneity of wildflowers across the plots - IN PROGRESS 
       # Use Wildflower variability across plots as a predictor in the model - precise metric to be determined
 # Example model: glm(mean_infested ~ mean_colemani + wsf_metric + inplot_wf, data = merged_data, family = "nb" )
 
-#rm(list=ls())
+rm(list=ls())
 # load packages
 library(tidyverse)
 library(glmmTMB) # models
 library(lme4) # models?
 library(MuMIn) # AICc
 library(readxl)
-library(vegan)  # For diversity indices?
- 
+library(vegan) # For diversity indices?
+
 #read in csv's
 wasp_data <- read_excel("data/RMD_sticky_trap_data.xlsx")
 aphid_data <- read_excel("data/aphid_data.xlsx")
@@ -43,6 +43,8 @@ aphid_data <- aphid_data %>%
 
 mean(wasp_data$aphidius_colemani)   #  mean
 var(wasp_data$aphidius_colemani) # variance (negative binomial check)
+
+# augmentation effect on parasitoid abundance
 
 # average aphid and wasp abundance across time (aggregate by plot) ----
 
@@ -87,9 +89,9 @@ merged_data <- inner_join(
   wasp_aggregated, 
   by = "plot_id"
 )
-view(wasp_aggregated)
+#view(wasp_aggregated)
 #str(wasp_aggregated)
-view(merged_data)
+#view(merged_data)
 # wildflower strip data wrangling ----
 
 # Convert Q1-Q10 columns to character
@@ -115,13 +117,25 @@ wildflower_mc <- wfs_data %>%
   mutate(quadrat = gsub("_m_c_r", "", quadrat))
 
 
-# merge the two datasets
+# merge the two data sets
 wfs_long <- wildflower_bb %>%
     left_join(wildflower_mc, by = c("common name", "Species", "quadrat")) %>%
   arrange(quadrat)
+
+# Average Braun-Blanquet (midpoint cover) per species across all 10 WFS quadrats
+wfs_avg <- wfs_long %>%
+  group_by(Species, quadrat) %>% # i think this might be incorrect but the index value looks much smaller without it
+  summarise(
+    avg_midpoint_cover = mean(midpoint_cover, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Calculate Shannon diversity for the entire WFS (pooled species averages)
+wfs_diversity <- diversity(wfs_avg$avg_midpoint_cover, index = "shannon")
 view(wfs_long)
 #str(wfs_long)
-
+view(wfs_avg)
+view(wfs_diversity)
 # collate floral cover per wfs quadrat
 
 quadrat_metrics <- wfs_long %>%
@@ -155,9 +169,53 @@ plot_wf_data <- plot_wf_data %>%
       braun_blanquet == "4" ~ 62.5,
       braun_blanquet == "5" ~ 87.5,
       TRUE ~ 0
-    ))# %>%
-  mutate(mc_scaled = midpoint_cover * (1 / 0.15))
+    ))
+
+view(plot_wf_data)
+  # LETS TRY THIS ONE MORE TIME
   
+
+
+# plot_wf_data Braun-Blanquet codes to midpoint covers for in-plot data
+inplot_data <- plot_wf_data %>%
+  mutate(
+    midpoint_cover = case_when(
+      braun_blanquet == "+" ~ 0.1,
+      braun_blanquet == "1" ~ 2.5,
+      braun_blanquet == "2" ~ 15,
+      braun_blanquet == "3" ~ 37.5,
+      braun_blanquet == "4" ~ 62.5,
+      braun_blanquet == "5" ~ 87.5,
+      TRUE ~ 0
+    )
+  )
+
+
+# Average Braun-Blanquet (midpoint cover) per species across 5 quadrats per plot
+inplot_avg <- plot_wf_data %>%
+  group_by(plot_id, Species) %>%  # Group by plot and species
+  summarise(
+    avg_midpoint_cover = mean(midpoint_cover, na.rm = TRUE),
+    .groups = "drop"
+  )
+view(inplot_avg)
+# Calculate Shannon diversity per plot UNNECCESSARY STUFF!!!!!!!!!!---- 
+inplot_diversity <- inplot_avg %>%
+  group_by(plot_id) %>%
+  summarise(
+    shannon_div = diversity(avg_midpoint_cover, index = "shannon")
+  )
+view(inplot_diversity)
+
+
+
+
+
+
+
+
+
+
 view(plot_wf_data)
 str(plot_wf_data)
 
@@ -170,27 +228,15 @@ plot_metrics <- plot_wf_data %>%
 
 
 view(plot_metrics)
-# Tidy, scale, and aggregate
-plot_metrics <- plot_wf_data %>%
-  mutate(across(starts_with("P"), as.character)) %>%
-  pivot_longer(cols = starts_with("P"), names_to = "plot_position", values_to = "braun_blanquet") %>%
-  separate(col = plot_position, into = c("plot_id", "quadrat"), sep = "C") %>%
-  mutate(
-    plot_id = as.numeric(gsub("P", "", plot_id)),
-    quadrat = paste0("C", quadrat),
-    midpoint_cover = case_when(
-      braun_blanquet == "+" ~ 0.1,
-      braun_blanquet == "1" ~ 2.5,
-      braun_blanquet == "2" ~ 15,
-      braun_blanquet == "3" ~ 37.5,
-      braun_blanquet == "4" ~ 62.5,
-      braun_blanquet == "5" ~ 87.5,
-      TRUE ~ 0
-    ),
-    midpoint_cover_scaled = midpoint_cover * (1 / 0.15)
-  ) %>%
-  group_by(plot_id) %>%
+
+wfs_pooled <- wfs_long %>%
+  group_by(Species) %>%
   summarise(
-    total_cover = sum(midpoint_cover_scaled, na.rm = TRUE),
-    shannon_div = vegan::diversity(midpoint_cover, index = "shannon")
+    total_midpoint_cover = sum(midpoint_cover, na.rm = TRUE),
+    .groups = "drop"
   )
+
+# Calculate Shannon diversity for the entire WFS (pooled data) (still giving small value)
+wfs_diversity_pooled <- diversity(wfs_pooled$total_midpoint_cover, index = "shannon")
+view(wfs_diversity_pooled)
+t.test(inplot_diversity$shannon_div, mu = wfs_diversity_pooled)
