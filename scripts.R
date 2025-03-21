@@ -19,7 +19,7 @@ library(glmmTMB) # models
 library(lme4) # models?
 library(MuMIn) # AICc
 library(readxl)
-library(vegan) # For diversity indices?
+library(vegan) # For diversity indices? - seems heavily biased for this type of research
 
 #read in csv's
 wasp_data <- read_excel("data/RMD_sticky_trap_data.xlsx")
@@ -37,61 +37,40 @@ str(aphid_data)
 str(plot_wf_data)
 # cleaning ----
 wasp_data <- wasp_data %>% 
-  mutate(across(c(set_no, n_treatment, crop, margin, con_rel), as.factor))
+  mutate(across(c(set_no, time_point,n_treatment, crop, margin_distance, augmentation), as.factor))
 aphid_data <- aphid_data %>%
-  mutate(across(c(set_no,sample_point), as.factor))
-
-mean(wasp_data$aphidius_colemani)   #  mean
-var(wasp_data$aphidius_colemani) # variance (negative binomial check)
-
+  mutate(across(c(set_no,time_point,sample_point), as.factor))
 # augmentation effect on parasitoid abundance
 
-# average aphid and wasp abundance across time (aggregate by plot) ----
+#  aphid and wasp abundance across time (aggregate by plot) ----
 
-aphid_avg <- aphid_data %>% 
-      group_by(plot_id) %>% 
-  summarise(mean_aphid = mean(no_infested))
+
 #view(aphid_avg)
-wasp_avg <- wasp_data %>% 
-      group_by(plot_id) %>%
-  summarise(
-    mean_ervi = mean(aphidius_ervi),
-    mean_colemani = mean(aphidius_colemani),
-    mean_ichneumonid = mean(ichneumonid_spp.),
-    mean_other = mean(other_parasitica),
-    .groups = "drop"
-  )
-#view(wasp_avg)
-aphid_aggregated <- aphid_data %>%
-  group_by(plot_id) %>%
-  summarise(
-    total_infested = sum(no_infested),  # Total across all time/sample points
-    mean_infested = mean(no_infested),  # Mean per sample point
-    .groups = "drop"
-  )
-
-wasp_aggregated <- wasp_data %>%
-  group_by(plot_id) %>%
-  summarise(                                 # New data frame with average abundance of each species
-    mean_ervi = sum(aphidius_ervi),
-    mean_colemani = sum(aphidius_colemani),
-    mean_ichneumonid = sum(ichneumonid_spp.),
-    mean_other = sum(other_parasitica),
-    .groups = "drop"                         # not quite sure why I use drop here lol
-  ) %>%
+wasp_aggregated <- wasp_data %>% 
+      group_by(plot_id, time_point) %>%
   # Convert to numeric and remove "P" from plot_id data
   mutate(plot_id = as.numeric(gsub("P", "", plot_id))) %>%
   arrange(plot_id)
+view(wasp_aggregated)
+
+aphid_aggregated <- aphid_data %>%
+  group_by(plot_id, time_point) %>%
+  summarise(
+    #aphid_total_infested = sum(no_infested),  # Total across all time/sample points
+    sum_infested = sum(no_infested),  # Mean per sample point
+    .groups = "drop"
+  )
+view(aphid_aggregated)
 
 # Combine data sets
 merged_data <- inner_join(
   aphid_aggregated, 
   wasp_aggregated, 
-  by = "plot_id"
+  by = c("plot_id", "time_point")
 )
-#view(wasp_aggregated)
+view(wasp_aggregated)
 #str(wasp_aggregated)
-#view(merged_data)
+view(merged_data)
 # wildflower strip data wrangling ----
 
 # Convert Q1-Q10 columns to character
@@ -122,42 +101,57 @@ wfs_long <- wildflower_bb %>%
     left_join(wildflower_mc, by = c("common name", "Species", "quadrat")) %>%
   arrange(quadrat)
 
-# Average Braun-Blanquet (midpoint cover) per species across all 10 WFS quadrats
-wfs_avg <- wfs_long %>%
-  group_by(Species, quadrat) %>% # i think this might be incorrect but the index value looks much smaller without it
+view(wfs_long)
+
+# Step 1: Calculate frequency and total cover per species
+species_summary <- wfs_long %>%
+  group_by(Species) %>%
   summarise(
-    avg_midpoint_cover = mean(midpoint_cover, na.rm = TRUE),
+    plots_of_occurrence = n_distinct(quadrat),
+    total_cover = sum(midpoint_cover, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    percent_frequency = (plots_of_occurrence / max(plots_of_occurrence)) * 100,
+    relative_frequency = (percent_frequency / sum(percent_frequency)) * 100,
+    relative_cover = (total_cover / sum(total_cover)) * 100,
+    importance_value = relative_frequency + relative_cover
+  )
+
+
+# Sort by importance value
+species_summary <- species_summary %>%
+  arrange(desc(importance_value))
+
+# View results
+View(species_summary)
+# Importance value: Fagopyrum esculentum = 74.74453
+# Importance value: Phacelia tanacetifolia = 62.57908
+# Importance value: Trifolium incarnatum = 21.62633
+# Importance value: Trifolium pratense = 20.69151
+# Importance value: Myosotis sylvatica = 20.35856
+
+# Average Braun-Blanquet (midpoint cover) per species across all 10 WFS quadrats
+wfs_sum_cover <- wfs_long %>%
+  group_by(Species) %>% # i think this might be incorrect but the index value looks much smaller without it
+  summarise(
+    sum_midpoint_cover = sum(midpoint_cover, na.rm = TRUE),
     .groups = "drop"
   )
 
-# Calculate Shannon diversity for the entire WFS (pooled species averages)
-wfs_diversity <- diversity(wfs_avg$avg_midpoint_cover, index = "shannon")
-view(wfs_long)
-#str(wfs_long)
-view(wfs_avg)
-view(wfs_diversity)
-# collate floral cover per wfs quadrat
-
-quadrat_metrics <- wfs_long %>%
-  group_by(quadrat) %>%
-  summarise(
-    total_cover = sum(midpoint_cover, na.rm = TRUE),  # Total cover per quadrat
-    shannon_div = diversity(midpoint_cover, index = "shannon")  # Diversity per quadrat
-  )
-view(quadrat_metrics)
 # in-plot wildflower data wrangling ----
 
-plot_wf_data <- plot_wf_data %>%
+inplot_long <- plot_wf_data %>%
   mutate(across(starts_with("P"), as.character)) %>%
   pivot_longer(cols = starts_with("P"),
     names_to = "plot_position",
     values_to = "braun_blanquet") %>%
   separate(col = plot_position,
-    into = c("plot_id", "quadrat"),  # Quoted column names
+    into = c("plot_id", "column"),  # Quoted column names
     sep = "C") %>%                        # Get rid of text from  "C" (e.g., "P1C2" → "P1")
   mutate(
     plot_id = as.numeric(gsub("P", "", plot_id)),  # Convert "P1" → 1
-    quadrat = paste0("C", quadrat)                # Restore quadrat label (e.g., "C2")
+    column = paste0("C", column)                # Restore quadrat label (e.g., "C2")
   ) %>%
 
   mutate(
@@ -171,24 +165,70 @@ plot_wf_data <- plot_wf_data %>%
       TRUE ~ 0
     ))
 
-view(plot_wf_data)
-  # LETS TRY THIS ONE MORE TIME
-  
+view(inplot_long)
+
+quadrat_cover <- inplot_long %>%
+  group_by(plot_id, column) %>%  # Group by plot and quadrat (column)
+  summarise(total_quadrat_cover = sum(midpoint_cover, na.rm = TRUE), .groups = "drop")
+
+view(quadrat_cover)
+plot_cover <- quadrat_cover %>%
+  group_by(plot_id) %>%
+  summarise(mean_wildflower_cover_pct = mean(total_quadrat_cover, na.rm = TRUE))
+
+view(plot_cover)
+
+# add to merged data 
+merged_data2 <- inner_join(
+  merged_data,
+  plot_cover,
+  by = "plot_id")
+view(merged_data2)
+
+# model iterations in lme4
+mod1 <- glmer.nb(
+  mean_colemani ~ aphid_mean_infested * mean_wildflower_cover_pct + (1|plot_id),
+  data = merged_data2)
+summary(mod1)
+plot(mod1)
+mod1 <- glmer.nb(
+  mean_colemani ~ aphid_mean_infested * mean_wildflower_cover_pct + (1|plot_id),
+  data = merged_data2)
 
 
-# plot_wf_data Braun-Blanquet codes to midpoint covers for in-plot data
-inplot_data <- plot_wf_data %>%
+
+# lots of unneccessary inplot data manipulations ----
+unique(plot_wf_data$Species) 
+library(dplyr)
+
+# Calculate global IVs for all species
+global_iv <- inplot_long %>%
+  group_by(Species) %>%
+  summarise(
+    plots_of_occurrence = n_distinct(plot_id),
+    total_cover = sum(midpoint_cover, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
   mutate(
-    midpoint_cover = case_when(
-      braun_blanquet == "+" ~ 0.1,
-      braun_blanquet == "1" ~ 2.5,
-      braun_blanquet == "2" ~ 15,
-      braun_blanquet == "3" ~ 37.5,
-      braun_blanquet == "4" ~ 62.5,
-      braun_blanquet == "5" ~ 87.5,
-      TRUE ~ 0
-    )
+    relative_frequency = (plots_of_occurrence / 16) * 100,
+    relative_cover = (total_cover / sum(total_cover)) * 100,
+    global_iv = relative_frequency + relative_cover
   )
+view(global_iv)
+# Assign global IVs to each plot and calculate plot-level score
+plot_scores <- inplot_long %>%
+  left_join(global_iv %>% select(Species, global_iv), by = "Species") %>%
+  group_by(plot_id) %>%
+  summarise(
+    plot_iv = sum(global_iv, na.rm = TRUE),
+    total_cover = sum(midpoint_cover, na.rm = TRUE)
+  )
+
+
+
+
+# View plot-level scores
+View(plot_scores)
 
 
 # Average Braun-Blanquet (midpoint cover) per species across 5 quadrats per plot
