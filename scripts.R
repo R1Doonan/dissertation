@@ -45,7 +45,7 @@ aphid_data <- aphid_data %>%
   mutate(across(c(plot_id,set_no,time_point,sample_point), as.factor))
 # augmentation effect on parasitoid abundance
 str(wasp_data)
-#  aphid and wasp abundance across time (aggregate by plot) ----
+# Wrangling ----
 
 
 #view(aphid_avg)
@@ -72,7 +72,7 @@ merged_data <- inner_join(
 #str(wasp_aggregated)
 view(merged_data)
 str(merged_data)
-# explore data
+# explore data ----
 check_overdispersion <- function(response_var) {
   var <- merged_data[[response_var]]
   dispersion <- var(var) / mean(var)
@@ -106,27 +106,8 @@ ggplot(merged_data, aes(x = augmentation, y = sum_infested)) +
   geom_boxplot() +
   geom_smooth(method = "loess", se = FALSE)
 
-# ok model time! - for each rq lets start 
-# visualisations
+# ok model time! - for each rq lets start iterating 
 
-
-# Get predicted marginal means
-aug_margin_effects <- ggpredict(
-  r1_mod_final,
-  terms = c("augmentation", "margin_distance", "sum_infested")
-)
-aug_margin_effects < - aug_margin_effects %>%
-  select(rename("distance (m)" = group))
-view(aug_margin_effects)
-# Plot
-ggplot(aug_margin_effects, aes(x = x, y = predicted, color = group)) +
-  geom_boxplot(size = 0.5) +
-  labs(
-    x = "Augmentation",
-    y = "Predicted Aphidius colemani Abundance"
-  ) +
-  scale_color_manual(values = c("#1b9e77", "#d95f02")) +
-  theme_minimal()
 # RQ1: augmentation and wildflowers effect on colemani ----
 r1_mod <- glmer.nb(
   aphidius_colemani ~ augmentation * margin_distance + sum_infested + (1|time_point) +
@@ -150,6 +131,25 @@ r1_mod_final <- glmmTMB(
 simulateResiduals(r1_mod_final) %>% plot()
 summary(r1_mod_tmb)
 plot(r1_mod_final)
+# RQ1 visualisations ----
+
+
+# Get predicted marginal means
+aug_margin_effects <- ggpredict(
+  r1_mod_final,
+  terms = c("augmentation", "margin_distance", "sum_infested")
+)
+aug_margin_effects < - aug_margin_effects %>%
+  view(aug_margin_effects)
+# Plot
+ggplot(aug_margin_effects, aes(x = x, y = predicted, color = group)) +
+  geom_boxplot(size = 0.5) +
+  labs(
+    x = "Augmentation",
+    y = "Predicted Aphidius colemani Abundance"
+  ) +
+  scale_color_manual(values = c("#1b9e77", "#d95f02")) +
+  theme_minimal()
 # RQ2: Augmentation and wildflower strip effect on aphid population ----
 r2_mod <- glmer.nb(
   sum_infested ~ augmentation * margin_distance + sum_infested + time_point +
@@ -160,6 +160,7 @@ r1_mod <- glmer.nb(
   aphidius_colemani ~ augmentation * margin_distance + (1|time_point),
   data = merged_data
 )
+# RQ2 visualisations ----
 # RQ3: wasp -  aphid relationship ----
 # incrop aphids response
 r3_mod_crop <- glmer.nb(
@@ -176,6 +177,7 @@ r3_mod_yst <- glmer.nb(
   data = merged_data
 )
 
+# RQ3 visualisations ----
 # wildflower strip data wrangling ----
 
 # Convert Q1-Q10 columns to character
