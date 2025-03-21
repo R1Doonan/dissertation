@@ -17,9 +17,10 @@ rm(list=ls())
 library(tidyverse)
 library(glmmTMB) # models
 library(lme4) # models?
-library(MuMIn) # AICc
-install.packages("StatisticalModels")
-library(readxl)
+library(MuMIn)
+library(ggeffects) # model visualisations
+library(DHARMa) # model diagnostics 
+library(readxl) # interpret spreadsheets
 library(vegan) # For diversity indices? - seems heavily biased for this type of research
 
 #read in csv's
@@ -82,24 +83,83 @@ check_overdispersion("aphidius_colemani")  # 1.98>1.5 so over dispersed
 check_overdispersion("sum_infested") # 7.2 is massively over dispersed
 
 table(merged_data$aphidius_colemani)  # Replace with your response
+# plot incrop aphid vs colemani
+ggplot(merged_data, aes(x = sum_infested, y = aphidius_colemani)) +
+  geom_point() +
+  geom_smooth(method = "loess", se = FALSE)
+# plot colemani vs augmentation
+ggplot(merged_data, aes(x = augmentation, y = aphidius_colemani)) +
+  geom_boxplot() +
+  geom_smooth(method = "loess", se = FALSE)
+# plot colemani abundance vs wfs distance
+ggplot(merged_data, aes(x = margin_distance, y = aphidius_colemani)) +
+  geom_boxplot() +
+  geom_smooth(method = "loess", se = FALSE)
+
+# plot aphid abundance against wfs distance
+ggplot(merged_data, aes(x = margin_distance, y = sum_infested)) +
+  geom_boxplot() +
+  geom_smooth(method = "loess", se = FALSE)
+
+# plot aphid abundance vs augmentation
+ggplot(merged_data, aes(x = augmentation, y = sum_infested)) +
+  geom_boxplot() +
+  geom_smooth(method = "loess", se = FALSE)
 
 # ok model time! - for each rq lets start 
+# visualisations
 
+
+# Get predicted marginal means
+aug_margin_effects <- ggpredict(
+  r1_mod_final,
+  terms = c("augmentation", "margin_distance", "sum_infested")
+)
+aug_margin_effects < - aug_margin_effects %>%
+  select(rename("distance (m)" = group))
+view(aug_margin_effects)
+# Plot
+ggplot(aug_margin_effects, aes(x = x, y = predicted, color = group)) +
+  geom_boxplot(size = 0.5) +
+  labs(
+    x = "Augmentation",
+    y = "Predicted Aphidius colemani Abundance"
+  ) +
+  scale_color_manual(values = c("#1b9e77", "#d95f02")) +
+  theme_minimal()
 # RQ1: augmentation and wildflowers effect on colemani ----
 r1_mod <- glmer.nb(
   aphidius_colemani ~ augmentation * margin_distance + sum_infested + (1|time_point) +
     (1|plot_id),
   data = merged_data
 )
-summary(r1_mod)
-R2GLMER(r1_mod)
-# RQ2: Augmentation and wildflower strip effect on aphid population ----
-r2_mod <- glmer.nb(
-  aphidius_colemani ~ augmentation * margin_distance + sum_infested + time_point +
-    (1 | plot_id),
+r1_mod <- glmer.nb(
+  aphidius_colemani ~ augmentation * margin_distance + sum_infested + (1|time_point),
+  data = merged_data, family = "negativebinomial"
+)
+r1_mod <- glmer.nb(
+  aphidius_colemani ~ augmentation * margin_distance + sum_infested + (1|plot_id),
+  data = merged_data
+)
+r1_mod_final <- glmmTMB(
+  aphidius_colemani ~ augmentation + margin_distance + sum_infested + (1 | plot_id),
+  family = nbinom2,
   data = merged_data
 )
 
+simulateResiduals(r1_mod_final) %>% plot()
+summary(r1_mod_tmb)
+plot(r1_mod_final)
+# RQ2: Augmentation and wildflower strip effect on aphid population ----
+r2_mod <- glmer.nb(
+  sum_infested ~ augmentation * margin_distance + sum_infested + time_point +
+    (1 | plot_id),
+  data = merged_data
+)
+r1_mod <- glmer.nb(
+  aphidius_colemani ~ augmentation * margin_distance + (1|time_point),
+  data = merged_data
+)
 # RQ3: wasp -  aphid relationship ----
 # incrop aphids response
 r3_mod_crop <- glmer.nb(
