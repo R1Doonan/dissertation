@@ -18,6 +18,7 @@ library(tidyverse)
 library(glmmTMB) # models
 library(lme4) # models?
 library(MuMIn) # AICc
+install.packages("StatisticalModels")
 library(readxl)
 library(vegan) # For diversity indices? - seems heavily biased for this type of research
 
@@ -37,19 +38,18 @@ str(aphid_data)
 str(plot_wf_data)
 # cleaning ----
 wasp_data <- wasp_data %>% 
-  mutate(across(c(set_no, time_point,n_treatment, crop, margin_distance, augmentation), as.factor))
+  mutate(plot_id = as.numeric(gsub("P", "", plot_id))) %>%   # Convert to numeric and remove "P" from plot_id data
+  mutate(across(c(plot_id,set_no, time_point,n_treatment, crop, margin_distance, augmentation), as.factor))
 aphid_data <- aphid_data %>%
-  mutate(across(c(set_no,time_point,sample_point), as.factor))
+  mutate(across(c(plot_id,set_no,time_point,sample_point), as.factor))
 # augmentation effect on parasitoid abundance
-
+str(wasp_data)
 #  aphid and wasp abundance across time (aggregate by plot) ----
 
 
 #view(aphid_avg)
 wasp_aggregated <- wasp_data %>% 
       group_by(plot_id, time_point) %>%
-  # Convert to numeric and remove "P" from plot_id data
-  mutate(plot_id = as.numeric(gsub("P", "", plot_id))) %>%
   arrange(plot_id)
 view(wasp_aggregated)
 
@@ -68,9 +68,54 @@ merged_data <- inner_join(
   wasp_aggregated, 
   by = c("plot_id", "time_point")
 )
-view(wasp_aggregated)
 #str(wasp_aggregated)
 view(merged_data)
+str(merged_data)
+# explore data
+check_overdispersion <- function(response_var) {
+  var <- merged_data[[response_var]]
+  dispersion <- var(var) / mean(var)
+  cat(response_var, "dispersion ratio:", dispersion, "\n")
+}
+
+check_overdispersion("aphidius_colemani")  # 1.98>1.5 so over dispersed 
+check_overdispersion("sum_infested") # 7.2 is massively over dispersed
+
+table(merged_data$aphidius_colemani)  # Replace with your response
+
+# ok model time! - for each rq lets start 
+
+# RQ1: augmentation and wildflowers effect on colemani ----
+r1_mod <- glmer.nb(
+  aphidius_colemani ~ augmentation * margin_distance + sum_infested + (1|time_point) +
+    (1|plot_id),
+  data = merged_data
+)
+summary(r1_mod)
+R2GLMER(r1_mod)
+# RQ2: Augmentation and wildflower strip effect on aphid population ----
+r2_mod <- glmer.nb(
+  aphidius_colemani ~ augmentation * margin_distance + sum_infested + time_point +
+    (1 | plot_id),
+  data = merged_data
+)
+
+# RQ3: wasp -  aphid relationship ----
+# incrop aphids response
+r3_mod_crop <- glmer.nb(
+  aphidius_colemani ~ sum_infested * margin_distance + augmentation + time_point +
+    (1 | plot_id),
+  data = merged_data
+)
+
+# RQ3: wasp - aphid relationship ----
+# yst aphid response
+r3_mod_yst <- glmer.nb(
+  aphidius_colemani ~ yst_aphids * margin_distance + augmentation + time_point +
+    (1 | plot_id),
+  data = merged_data
+)
+
 # wildflower strip data wrangling ----
 
 # Convert Q1-Q10 columns to character
