@@ -47,12 +47,10 @@ aphid_data <- aphid_data %>%
 str(wasp_data)
 # Wrangling ----
 
-
-#view(aphid_avg)
 wasp_aggregated <- wasp_data %>% 
       group_by(plot_id, time_point) %>%
   arrange(plot_id)
-view(wasp_aggregated)
+#view(wasp_aggregated)
 
 aphid_aggregated <- aphid_data %>%
   group_by(plot_id, time_point) %>%
@@ -61,7 +59,7 @@ aphid_aggregated <- aphid_data %>%
     sum_infested = sum(no_infested),  # Mean per sample point
     .groups = "drop"
   )
-view(aphid_aggregated)
+#view(aphid_aggregated)
 
 # Combine data sets
 merged_data <- inner_join(
@@ -109,31 +107,30 @@ ggplot(merged_data, aes(x = augmentation, y = sum_infested)) +
 # ok model time! - for each rq lets start iterating 
 
 # RQ1: augmentation and wildflowers effect on colemani ----
-r1_mod <- glmer.nb(
-  aphidius_colemani ~ augmentation * margin_distance + sum_infested + (1|time_point) +
-    (1|plot_id),
-  data = merged_data
-)
-r1_mod <- glmer.nb(
-  aphidius_colemani ~ augmentation * margin_distance + sum_infested + (1|time_point),
-  data = merged_data, family = "negativebinomial"
-)
-r1_mod <- glmer.nb(
-  aphidius_colemani ~ augmentation * margin_distance + sum_infested + (1|plot_id),
-  data = merged_data
-)
+#r1_mod <- glmer.nb(
+#  aphidius_colemani ~ augmentation * margin_distance + sum_infested + (1|time_point) +
+#    (1|plot_id),
+#  data = merged_data)
+#r1_mod <- glmer.nb(
+#  aphidius_colemani ~ augmentation * margin_distance + sum_infested + (1|time_point),
+#  data = merged_data, family = "negativebinomial")
+
+
+
 r1_mod_final <- glmmTMB(
-  aphidius_colemani ~ augmentation + margin_distance + sum_infested + (1 | plot_id),
+  aphidius_colemani ~ augmentation + margin_distance + sum_infested + (1 | plot_id) + (1 | time_point),
   family = nbinom2,
   data = merged_data
 )
 
 simulateResiduals(r1_mod_final) %>% plot()
-summary(r1_mod_tmb)
+testDispersion(r1_mod_final)
+testZeroInflation(r1_mod_final)
+testUniformity(r1_mod_final)
+testOutliers(r1_mod_final)
+summary(r1_mod_final)$sigma  # For glmmTMB models
 plot(r1_mod_final)
 # RQ1 visualisations ----
-
-
 # Get predicted marginal means
 aug_margin_effects <- ggpredict(
   r1_mod_final,
@@ -142,24 +139,64 @@ aug_margin_effects <- ggpredict(
 aug_margin_effects < - aug_margin_effects %>%
   view(aug_margin_effects)
 # Plot
-ggplot(aug_margin_effects, aes(x = x, y = predicted, color = group)) +
+ggplot(aug_margin_effects, aes(x = x, y = predicted, fill = group)) +
   geom_boxplot(size = 0.5) +
   labs(
     x = "Augmentation",
     y = "Predicted Aphidius colemani Abundance"
   ) +
-  scale_color_manual(values = c("#1b9e77", "#d95f02")) +
-  theme_minimal()
+  scale_colour_manual(values = c("#1b9e77", "#d95f02")) +
+  scale_fill_manual(values = c("pink", "red"), labels = c("33 m", "83 m"), name = "Distance from WFS") +
+  theme_classic()
 # RQ2: Augmentation and wildflower strip effect on aphid population ----
-r2_mod <- glmer.nb(
-  sum_infested ~ augmentation * margin_distance + sum_infested + time_point +
-    (1 | plot_id),
+# Model for in-crop aphids
+r2_mod_crop <- glmmTMB(
+  sum_infested ~ augmentation * margin_distance + (1 | time_point)+ (1 | plot_id),
+  family = nbinom2,
   data = merged_data
 )
-r1_mod <- glmer.nb(
-  aphidius_colemani ~ augmentation * margin_distance + (1|time_point),
+simulateResiduals(r2_mod_crop) %>% plot()
+testDispersion(r2_mod_crop)
+testZeroInflation(r2_mod_crop)
+testUniformity(r2_mod_crop)
+testOutliers(r2_mod_crop)summary(r2_mod_crop)$sigma  # For glmmTMB models
+
+# Model for YST aphids
+r2_mod_yst <- glmmTMB(
+  yst_aphids ~ augmentation + margin_distance + sum_infested + (1 | plot_id) + (1 | time_point),
+  family = nbinom2,
   data = merged_data
 )
+simulateResiduals(r2_mod_yst) %>% plot()
+testDispersion(r2_mod_yst)
+testZeroInflation(r2_mod_yst)
+testUniformity(r2_mod_yst)
+testOutliers(r2_mod_yst)
+ggplot(aug_margin_effects, aes(x = x, y = predicted, fill = group)) +
+  geom_boxplot(
+    size = 0.5,
+    color = "black",
+    alpha = 0.8,
+    outlier.shape = 8
+  ) +
+  labs(
+    x = "Augmentation",
+    y = "Predicted Aphidius colemani Abundance",
+    fill = "Distance"
+  ) +
+  scale_fill_brewer(
+    palette = "Dark2",
+    labels = c("33 m", "83 m")
+  ) +
+  scale_x_discrete(
+    labels = c("No Augmentation", "Augmentation")) +  # Rename x-axis labels
+ 
+  theme_classic() +
+  theme(
+    text = element_text(family = "Arial"),
+    legend.position = "bottom"
+  )
+summary(r2_mod_yst)
 # RQ2 visualisations ----
 # RQ3: wasp -  aphid relationship ----
 # incrop aphids response
