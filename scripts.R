@@ -59,16 +59,14 @@ aphid_aggregated <- aphid_data %>%
   summarise(
     #aphid_total_infested = sum(no_infested),  # Total across all time/sample points
     sum_infested = sum(no_infested),  # Mean per sample point
-    .groups = "drop"
-  )
+    .groups = "drop")
 #view(aphid_aggregated)
 
 # Combine data sets
 merged_data <- inner_join(
   aphid_aggregated, 
   wasp_aggregated, 
-  by = c("plot_id", "time_point")
-)
+  by = c("plot_id", "time_point"))
 #str(wasp_aggregated)
 view(merged_data)
 str(merged_data)
@@ -430,12 +428,12 @@ testOutliers(r3_mod_yst)
 
 # wildflower strip data wrangling ----
 
-# Convert Q1-Q10 columns to character
+# Convert columns to character
 wfs_data <- wfs_data %>%
   mutate(across(starts_with("Q") & !ends_with("m_c_r"), as.character)) %>%
   mutate(across())
 
-# create new column of quadrat braun-Blanquet scores
+# create new column of braun-Blanquet scores
 wildflower_bb <- wfs_data %>%
    select(`common name`, Species, starts_with("Q") & !ends_with("m_c_r")) %>%
    pivot_longer(cols = -c(`common name`, Species),
@@ -460,7 +458,7 @@ wfs_long <- wildflower_bb %>%
 
 view(wfs_long)
 
-# Step 1: Calculate frequency and total cover per species
+# calculating wfs species importance values (no longer useful for results)----
 species_summary <- wfs_long %>%
   group_by(Species) %>%
   summarise(
@@ -472,15 +470,9 @@ species_summary <- wfs_long %>%
     percent_frequency = (plots_of_occurrence / max(plots_of_occurrence)) * 100,
     relative_frequency = (percent_frequency / sum(percent_frequency)) * 100,
     relative_cover = (total_cover / sum(total_cover)) * 100,
-    importance_value = relative_frequency + relative_cover
-  )
-
-
-# Sort by importance value
-species_summary <- species_summary %>%
+    importance_value = relative_frequency + relative_cover) %>%
   arrange(desc(importance_value))
 
-# View results
 View(species_summary)
 # Importance value: Fagopyrum esculentum = 74.74453
 # Importance value: Phacelia tanacetifolia = 62.57908
@@ -496,7 +488,7 @@ wfs_sum_cover <- wfs_long %>%
     .groups = "drop"
   )
 
-# in-plot wildflower data wrangling ----
+# plot wheeling wildflower data wrangling ----
 
 inplot_long <- plot_wf_data %>%
   mutate(across(starts_with("P"), as.character)) %>%
@@ -504,12 +496,8 @@ inplot_long <- plot_wf_data %>%
     names_to = "plot_position",
     values_to = "braun_blanquet") %>%
   separate(col = plot_position,
-    into = c("plot_id", "column"),  # Quoted column names
-    sep = "C") %>%                        # Get rid of text from  "C" (e.g., "P1C2" → "P1")
-  mutate(
-    plot_id = as.numeric(gsub("P", "", plot_id)),  # Convert "P1" → 1
-    column = paste0("C", column)                # Restore quadrat label (e.g., "C2")
-  ) %>%
+    into = c("plot_id", "column"), 
+    sep = "C") %>%                        # Get rid of text
 
   mutate(
     midpoint_cover = case_when(
@@ -519,8 +507,7 @@ inplot_long <- plot_wf_data %>%
       braun_blanquet == "3" ~ 37.5,
       braun_blanquet == "4" ~ 62.5,
       braun_blanquet == "5" ~ 87.5,
-      TRUE ~ 0
-    ))
+      TRUE ~ 0))
 
 view(inplot_long)
 
@@ -534,7 +521,7 @@ plot_cover <- quadrat_cover %>%
   summarise(mean_wildflower_cover_pct = mean(total_quadrat_cover, na.rm = TRUE))
 
 view(plot_cover)
-
+str(quadrat_cover)
 # add to merged data 
 merged_data2 <- inner_join(
   merged_data,
