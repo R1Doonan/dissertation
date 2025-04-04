@@ -22,6 +22,7 @@ library(MuMIn)# AICc values
 library(DHARMa) # model diagnostics 
 library(ggeffects) # model visualisations
 library(patchwork)# multi-plot model visualisations
+library(ggtext) # italics in plots
 library(vegan) # For diversity indices? - seems heavily biased for this type of research
 
 #read in data sets
@@ -152,8 +153,6 @@ ggplot(merged_data, aes(x = augmentation, y = sum_infested)) +
 
 # ok model time! - for each rq lets start iterating 
 
-# create themes/palettes  ----
-  accent = "#4682B4"          # Steel Blue (optional tertiary)
 
 # RQ1: augmentation and wildflowers effect on colemani ----
 
@@ -165,7 +164,7 @@ r1_mod_crop <- glmmTMB(
   aphidius_colemani ~ augmentation * margin_distance + sum_infested + (1 | plot_id) + (1 | time_point),
   family = nbinom2,
   data = merged_data)
-
+# models suitability ----
 check_collinearity(r1_mod_yst)  # For models without interactions
 simulateResiduals(r1_mod_yst) %>% plot()
 
@@ -179,9 +178,9 @@ testZeroInflation(r1_mod_crop)
 testUniformity(r1_mod_crop)
 testOutliers(r1_mod_crop)
 
-summary(r1_mod_yst)  
+summary(r1_mod_yst)  # 
 summary(r1_mod_crop)  
-AICc(r1_mod_yst, r1_mod_crop) # 187.13, 195
+AICc(r1_mod_yst, r1_mod_crop) # 187.13, 195.72
 
 # RQ1 visualisations ----
 # Get predicted marginal means
@@ -193,12 +192,7 @@ aug_margin_effects <- ggpredict(
   terms = c("augmentation", "margin_distance", "yst_aphids"))
 view(aug_margin_effects)
 
-# Generate predictions for the interaction
-pred_interaction <- ggpredict(
-  r1_mod_yst,
-  terms = c("augmentation", "margin_distance")  # Interaction only
-)
-view(pred_interaction)
+
 # Interaction plot
 # Generate predictions for the interaction
 pred_interaction <- ggpredict(
@@ -207,13 +201,21 @@ pred_interaction <- ggpredict(
 )
 
 # Plot raw data (boxplots) and model predictions (points ± CI)
-p_interaction <- ggplot(merged_data,aes(x = augmentation, y = aphidius_colemani, fill = margin_distance)) + # Raw data boxplots
-  geom_boxplot(alpha = 0.6, position = position_dodge(width = 0.8)) +
-  geom_point(data = pred_interaction,
+p_interaction <- ggplot(
+  merged_data,
+  aes(x = augmentation, y = aphidius_colemani)) +
+  geom_boxplot(
+    aes(fill = margin_distance),  # Moved fill here
+    alpha = 0.8,
+    position = position_dodge(width = 0.8)
+  ) +
+  # Model predictions (no fill needed)
+  geom_point(
+    data = pred_interaction,
     aes(x = x, y = predicted, group = group),
     color = "black",
     size = 3,
-    shape = 18,  # Diamond shape for predictions
+    shape = 18,
     position = position_dodge(width = 0.8)
   ) +
   geom_errorbar(
@@ -229,20 +231,22 @@ p_interaction <- ggplot(merged_data,aes(x = augmentation, y = aphidius_colemani,
     labels = c("33 m", "83 m"),
     name = "WFS Distance"
   ) +
-  scale_x_discrete(labels = c("No Augmentation", "Augmentation")) +
+  scale_x_discrete(
+    labels = c("No Augmentation", "Augmentation")
+  ) +
   labs(
     x = "Augmentation",
-    y = "Aphidius colemani Abundance"
+    y = "*Aphidius colemani* Abundance"
   ) +
-  theme_classic(base_size
+  theme_classic(base_size = 14) +
+  theme(panel.grid.major.x = element_blank(),
+        legend.position = "bottom", 
+        axis.title = element_text(face = "bold"),
+        axis.title.y = element_markdown(),
+        axis.title.x = element_markdown())
+ 
 p_interaction
-final_plot <- (p_aug + p_dist) + p_interaction +
-  plot_annotation(tag_levels = "A") &
-  theme(plot.tag = element_text(face = "bold", size = 20))
-
-final_plot
 # single predictor visualisations
-
 pred_aug <- ggpredict(r1_mod_yst, terms = "augmentation")# Augmentation effect
 pred_dist <- ggpredict(r1_mod_yst, terms = "margin_distance")# Distance effect
 
@@ -250,58 +254,59 @@ pred_dist <- ggpredict(r1_mod_yst, terms = "margin_distance")# Distance effect
 p_aug <- ggplot(merged_data, aes(x = augmentation, y = aphidius_colemani)) +
   geom_boxplot(
     width = 0.6,
-    fill = "#1b9e77",
-    alpha = 0.6) +
+    fill = "#CB4154",
+    alpha = 0.7) +
   geom_point(
     data = pred_aug,
     aes(x = x, y = predicted),
     size = 3,
-    color = "#1b9e77"
+    color = "black"
   ) +
   geom_errorbar(
     data = pred_aug,
     aes(x = x, y = predicted, ymin = conf.low, ymax = conf.high),
     width = 0.1,
-    color = "#1b9e77",
+    color = "black",
     linewidth = 1) +
-  labs(x = "Augmentation", y = "Wasp Abundance") +
+  labs(x = "Augmentation", y = "*Aphidius colemani* Abundance") +
   scale_x_discrete(labels = c("No Augmentation", "Augmentation")) +   
   theme_classic(base_size = 14) +
   theme(
     panel.grid.major.x = element_blank(),
-    axis.title = element_text(face = "bold"))
+    axis.title = element_text(face = "bold"),axis.title.y = element_markdown(),
+    axis.title.x = element_markdown())
 p_aug
 # Plot 2: Distance effect
 p_dist <- ggplot(merged_data, aes(x = margin_distance, y = aphidius_colemani)) +
   geom_boxplot(
     width = 0.6,
-    fill = "#DF6D16",
-    alpha = 0.6) +
+    fill = "#CB4154",
+    alpha = 0.7) +
   geom_point(
     data = pred_dist,
     aes(x = x, y = predicted),
     size = 3,
-    color = "#DF6D16"
+    color = "black"
   ) +
   geom_errorbar(
     data = pred_dist,
     aes(x = x, y = predicted, ymin = conf.low, ymax = conf.high),
     width = 0.1,
-    color = "#DF6D16",
+    color = "black",
     linewidth = 1
   ) +
-  labs(x = "Distance from Wildflower Strip", y = "Wasp Abundance") +
+  labs(x = "Distance from Wildflower Strip", y = "*Aphidius colemani* Abundance") +
   scale_x_discrete(labels = c("33 m", "83 m")) +   
   theme_classic(base_size = 14) +
   theme(
     panel.grid.major.x = element_blank(),
-    axis.title = element_text(face = "bold"))
+    axis.title = element_text(face = "bold"),axis.title.y = element_markdown(),
+    axis.title.x = element_markdown())
 p_dist
 # Combine plots
 combined_plot <- p_aug + p_dist +
   plot_annotation(tag_levels = "A") &
   theme(plot.tag = element_text(face = "bold", size = 20))
-
 combined_plot
 # RQ2: Augmentation and wildflower strip effect on aphid population ----
 # Model for in-crop aphids
@@ -317,7 +322,7 @@ testZeroInflation(r2_mod_crop)
 testUniformity(r2_mod_crop)
 testOutliers(r2_mod_crop)
 summary(r2_mod_crop)$sigma  # For glmmTMB models
-AICc(r2_mod_crop) # 334.87
+AICc(r2_mod_crop, r2_mod_yst) # 336.34
 
 # Model for YST aphids
 # negative binomial for interaction term
@@ -332,129 +337,272 @@ testZeroInflation(r2_mod_yst)
 testUniformity(r2_mod_yst)
 testOutliers(r2_mod_yst)
 AICc(r2_mod_yst) # 204.17
-# RQ2 visualisations ----
+# RQ2 visualisations - interactions ----
 # marginal means
 r2_pred_aug_crop <- ggpredict(r2_mod_crop,
   terms = c("augmentation"))
 summary(r2_mod_crop)
-# single predictor visualisations
-pred_dist_crop <- ggpredict(r2_mod_crop, terms = "augmentation")# Augmentation effect
-r2_pred_aug_crop <- ggpredict(r2_mod_crop, terms = c("augmentation", "margin_distance"))
-r2_pred_aug_yst <- ggpredict(r2_mod_yst, terms = c("augmentation", "margin_distance"))
-pred_dist_yst <- ggpredict(r2_mod_yst, terms = "margin_distance")# Distance effect
 
-# interaction effect predictors
-aug_margin_effects_crop <- ggpredict(
+# interaction effect predictors for incrop and yst aphid data
+pred_interaction_crop <- ggpredict(
   r2_mod_crop,
-  terms = c("augmentation", "margin_distance", "aphidius_colemani"))
-aug_margin_effects_yst <-ggpredict(
+  terms = c("augmentation", "margin_distance"))
+pred_interaction_yst <-ggpredict(
   r2_mod_yst,
-  terms = c("augmentation", "margin_distance", "aphidius_colemani"))
+  terms = c("augmentation", "margin_distance"))
+view(pred_interaction_yst)
+#Plot raw data (boxplots ) and model predictions (geom_point)
+p_interaction_crop <- ggplot(
+  merged_data,
+  aes(x = augmentation, y = aphidius_colemani)) +
+  geom_boxplot(
+    aes(fill = margin_distance),  # Moved fill here
+    alpha = 0.8,
+    position = position_dodge(width = 0.8)) +
+  # Model predictions (no fill needed)
+  geom_point(
+    data = pred_interaction_crop,
+    aes(x = x, y = predicted, group = group),
+    color = "black",
+    size = 3,
+    shape = 18,
+    position = position_dodge(width = 0.8)) +
+  geom_errorbar(
+    data = pred_interaction_crop,
+    aes(x = x, y = predicted, ymin = conf.low, ymax = conf.high, group = group),
+    width = 0.1,
+    color = "black",
+    linewidth = 1,
+    position = position_dodge(width = 0.8)) +
+  scale_fill_brewer(
+    palette = "Dark2", 
+    labels = c("33 m", "83 m"),
+    name = "WFS Distance") +
+  scale_x_discrete(
+    labels = c("No Augmentation", "Augmentation")) +
+  labs(
+    x = "Augmentation",
+    y = "*Aphis fabae* In Crop Infestations") +
+  theme_classic(base_size = 14) +
+  theme(panel.grid.major.x = element_blank(),
+        legend.position = "bottom", 
+        axis.title = element_text(face = "bold"),
+        axis.title.y = element_markdown(),
+        axis.title.x = element_markdown())
+p_interaction_crop
+
+p_interaction_yst <- ggplot(
+  merged_data,
+  aes(x = augmentation, y = aphidius_colemani)) +
+  geom_boxplot(
+    aes(fill = margin_distance),  # Moved fill here
+    alpha = 0.8,
+    position = position_dodge(width = 0.8)) +
+  # Model predictions (no fill needed)
+  geom_point(
+    data = pred_interaction_yst,
+    aes(x = x, y = predicted, group = group),
+    color = "black",
+    size = 3,
+    shape = 18,
+    position = position_dodge(width = 0.8)) +
+  geom_errorbar(
+    data = pred_interaction_yst,
+    aes(x = x, y = predicted, ymin = conf.low, ymax = conf.high, group = group),
+    width = 0.1,
+    color = "black",
+    linewidth = 1,
+    position = position_dodge(width = 0.8)) +
+  scale_fill_brewer(
+    palette = "Dark2", 
+    labels = c("33 m", "83 m"),
+    name = "WFS Distance") +
+  scale_x_discrete(
+    labels = c("No Augmentation", "Augmentation")) +
+  labs(
+    x = "Augmentation",
+    y = "*Aphis fabae* Sticky Trap Abundance") +
+  theme_classic(base_size = 14) +
+  theme(panel.grid.major.x = element_blank(),
+        legend.position = "none", 
+        axis.title = element_text(face = "bold"),
+        axis.title.y = element_markdown(),
+        axis.title.x = element_markdown())
+p_interaction_yst
+
+aphid_int_combined <-  p_interaction_yst / p_interaction_crop +
+  plot_annotation(tag_levels = "A") &
+  theme(plot.tag = element_text(face = "bold", size = 20))
+aphid_int_combined
+# Single variable plot visualisations ----
+# single predictor visualisations
+r2_pred_dist_crop <- ggpredict(r2_mod_crop, terms = "margin_distance")# Augmentation effect
+r2_pred_aug_crop <- ggpredict(r2_mod_crop, terms = c("augmentation"))
+r2_pred_aug_yst <- ggpredict(r2_mod_yst, terms = c("augmentation"))
+r2_pred_dist_yst <- ggpredict(r2_mod_yst, terms = "margin_distance")# Distance effect
+
 # Plot 1: Augmentation effect incrop
 p_aug <- ggplot(merged_data, aes(x = augmentation, y = aphidius_colemani)) +
   geom_boxplot(
     width = 0.6,
-    fill = "#1b9e77",
-    alpha = 0.6) +
+    fill = "#CB4154",
+    alpha = 0.7) +
   geom_point(
-    data = r2_pred_aug_crop,
+    data = pred_aug,
     aes(x = x, y = predicted),
     size = 3,
-    color = "#1b9e77"
+    color = "black"
   ) +
   geom_errorbar(
-    data = r2_pred_aug_crop,
+    data = pred_aug,
     aes(x = x, y = predicted, ymin = conf.low, ymax = conf.high),
     width = 0.1,
-    color = "#1b9e77",
+    color = "black",
     linewidth = 1) +
-  labs(x = "Augmentation ", y = "Aphis fabae Abundance") +
-  scale_x_discrete(labels = c("Present", "Absent")) +   
+  labs(x = "Augmentation", y = "*Aphidius colemani* Abundance") +
+  scale_x_discrete(labels = c("No Augmentation", "Augmentation")) +   
   theme_classic(base_size = 14) +
   theme(
     panel.grid.major.x = element_blank(),
-    axis.title = element_text(face = "bold"))
+    axis.title = element_text(face = "bold"),axis.title.y = element_markdown(),
+    axis.title.x = element_markdown())
 p_aug
-# Plot 2: Distance effect incrop
-p_dist <- ggplot(merged_data, aes(x = augmentation, y = aphidius_colemani)) +
+# ai waffle
+# Plot 1: Augmentation effect (in-crop)
+p_aug_crop <- ggplot(merged_data, aes(x = augmentation, y = sum_infested)) +
   geom_boxplot(
     width = 0.6,
-    fill = "#DF6D16",
-    alpha = 0.6) +
+    fill = "#CB4154",
+    alpha = 0.6
+  ) +
   geom_point(
-    data = pred_dist_crop,
+    data = r2_pred_aug_crop,
     aes(x = x, y = predicted),
     size = 3,
-    color = "#DF6D16") +
-  geom_errorbar(
-    data = pred_dist_crop,
-    aes(x = x, y = predicted, ymin = conf.low, ymax = conf.high),
-    width = 0.1,
-    color = "#DF6D16",
-    linewidth = 1) +
-  labs(x = "Augmentation", y = "Aphis Fabae Plant Infestations") +
-  scale_x_discrete(labels = c("No Augmentation", "Augmentation")) +   
-  theme_classic(base_size = 14) +
-  theme(
-    panel.grid.major.x = element_blank(),
-    axis.title = element_text(face = "bold"))
-p_dist
-# Combine plots
-combined_plot <- p_aug + p_dist +
-  plot_annotation(tag_levels = "A") &
-  theme(plot.tag = element_text(face = "bold", size = 20))
-
-combined_plot
-# Plot 3: Augmentation effect yst
-p_aug_yst <- ggplot(merged_data, aes(x = augmentation, y = aphidius_colemani)) +
-  geom_boxplot(
-    width = 0.6,
-    fill = "#1b9e77",
-    alpha = 0.6) +
-  geom_point(
-    data = r2_pred_aug_yst,
-    aes(x = x, y = predicted),
-    size = 3,
-    color = "#1b9e77"
+    color = "black"
   ) +
   geom_errorbar(
-    data = r2_pred_aug_yst,
+    data = r2_pred_aug_crop,
     aes(x = x, y = predicted, ymin = conf.low, ymax = conf.high),
     width = 0.1,
-    color = "#1b9e77",
-    linewidth = 1) +
-  labs(x = "Augmentation", y = "Wasp Abundance") +
-  scale_x_discrete(labels = c("No Augmentation", "Augmentation")) +   
-  theme_classic(base_size = 14) +
-  theme(
-    panel.grid.major.x = element_blank(),
-    axis.title = element_text(face = "bold"))
-p_aug_yst
-# Plot 2: Distance effect yst
-p_dist_yst <- ggplot(merged_data, aes(x = margin_distance, y = aphidius_colemani)) +
-  geom_boxplot(
-    width = 0.6,
-    fill = "#DF6D16",
-    alpha = 0.6) +
-  geom_point(
-    data = pred_dist_yst,
-    aes(x = x, y = predicted),
-    size = 3,
-    color = "#DF6D16"
-  ) +
-  geom_errorbar(
-    data = pred_dist_yst,
-    aes(x = x, y = predicted, ymin = conf.low, ymax = conf.high),
-    width = 0.1,
-    color = "#DF6D16",
+    color = "black",
     linewidth = 1
   ) +
-  labs(x = "Distance from Wildflower Strip (m)", y = "Wasp Abundance") +
+  labs(
+    x = "Augmentation",
+    y = "*Aphis fabae* Abundance<br>(In-Crop Plants)"
+  ) +
+  scale_x_discrete(labels = c("No Augmentation", "Augmentation")) +
   theme_classic(base_size = 14) +
   theme(
-    panel.grid.major.x = element_blank(),
-    axis.title = element_text(face = "bold"))
-p_dist
+    axis.title.y = element_markdown(face = "bold"),
+    axis.title.x = element_text(face = "bold")
+  )
+p_aug_crop
+# Plot 2: Distance effect incrop
+p_dist_crop <- ggplot(merged_data, aes(x = margin_distance, y = sum_infested)) +
+  geom_boxplot(
+    width = 0.6,
+    fill = "#CB4154",
+    alpha = 0.6
+  ) +
+  geom_point(
+    data = r2_pred_dist_crop,
+    aes(x = x, y = predicted),
+    size = 3,
+    color = "black"
+  ) +
+  geom_errorbar(
+    data = r2_pred_dist_crop,
+    aes(x = x, y = predicted, ymin = conf.low, ymax = conf.high),
+    width = 0.1,
+    color = "black",
+    linewidth = 1
+  ) +
+  labs(
+    x = "Distance from Wildflower Strip (m)",
+    y = "*Aphis fabae* Abundance<br>(In-Crop Plants)"
+  ) +
+  scale_x_discrete(labels = c("33 m", "83 m")) +
+  theme_classic(base_size = 14) +
+  theme(
+    axis.title.y = element_markdown(face = "bold"),
+    axis.title.x = element_text(face = "bold")
+  )
+p_dist_crop
+
+# Combine in-crop plots
+combined_crop <- p_aug_crop + p_dist_crop +
+  plot_annotation(tag_levels = "A") &
+  theme(plot.tag = element_text(face = "bold", size = 20))
+combined_crop
+
+# Plot 1: Augmentation effect (YST)
+p_aug_yst <- ggplot(merged_data, aes(x = augmentation, y = yst_aphids)) +
+  geom_boxplot(
+    width = 0.6,
+    fill = "#CB4154",
+    alpha = 0.6
+  ) +
+  geom_point(
+    data = r2_pred_aug_yst,
+    aes(x = x, y = predicted),
+    size = 3,
+    color = "black"
+  ) +
+  geom_errorbar(
+    data = r2_pred_aug_yst,
+    aes(x = x, y = predicted, ymin = conf.low, ymax = conf.high),
+    width = 0.1,
+    color = "black",
+    linewidth = 1
+  ) +
+  labs(
+    x = "Augmentation",
+    y = "*Aphis fabae* Abundance<br>(Yellow Sticky Traps)"
+  ) +
+  scale_x_discrete(labels = c("No Augmentation", "Augmentation")) +
+  theme_classic(base_size = 14) +
+  theme(
+    axis.title.y = element_markdown(face = "bold"),
+    axis.title.x = element_text(face = "bold")
+  )
+p_aug_yst
+# Plot 2: Distance effect (YST)
+p_dist_yst <- ggplot(merged_data, aes(x = margin_distance, y = yst_aphids)) +
+  geom_boxplot(
+    width = 0.6,
+    fill = "#CB4154",
+    alpha = 0.6
+  ) +
+  geom_point(
+    data = r2_pred_dist_yst,
+    aes(x = x, y = predicted),
+    size = 3,
+    color = "black"
+  ) +
+  geom_errorbar(
+    data = r2_pred_dist_yst,
+    aes(x = x, y = predicted, ymin = conf.low, ymax = conf.high),
+    width = 0.1,
+    color = "black",
+    linewidth = 1
+  ) +
+  labs(
+    x = "Distance from Wildflower Strip (m)",
+    y = "*Aphis fabae* Abundance<br>(Yellow Sticky Traps)"
+  ) +
+  scale_x_discrete(labels = c("33 m", "83 m")) +
+  theme_classic(base_size = 14) +
+  theme(
+    axis.title.y = element_markdown(face = "bold"),
+    axis.title.x = element_text(face = "bold"))
+p_dist_yst
+# Combine YST plots
+combined_yst <- p_aug_yst + p_dist_yst +
+  plot_annotation(tag_levels = "A") &
+  theme(plot.tag = element_text(face = "bold", size = 20))
+combined_yst
 # in-crop aphid abundance influenced by augmentation and wfs distance 
 ggplot(r2_pred_crop, aes(x = x, y = predicted, fill = group)) +
   geom_boxplot(
@@ -531,12 +679,17 @@ testDispersion(r3_mod_yst)
 testZeroInflation(r3_mod_yst)
 testUniformity(r3_mod_yst)
 testOutliers(r3_mod_yst)
-
+# spearman's rank correlation
+cor.test(
+  merged_data$sum_infested,
+  merged_data$aphidius_colemani,
+  method = "spearman")  # Use FALSE for large datasets or ties
+cor.test(
+  merged_data$yst_aphids,
+  merged_data$aphidius_colemani,
+  method = "spearman") 
 # RQ3 visualisations ----
-# Generate predictions conditioned on augmentation
-pred_rq3 <- ggpredict(
-  r3_mod_incrop,
-  terms = c("sum_infested [all]", "margin_distance"))  # x-axis and grouping
+
 
 # Plot 1: YST aphids vs. wasps
 p1 <- ggplot(merged_data, aes(yst_aphids, aphidius_colemani)) +
@@ -559,7 +712,10 @@ final_rq3_plot <- p1 + p2 +
 final_rq3_plot
 
 spearman
-
+# 1: Generate predictions conditioned on augmentation
+pred_rq3 <- ggpredict(
+  r3_mod_incrop,
+  terms = c("sum_infested [all]", "margin_distance"))  # x-axis and grouping
 # 2: colemani - incrop aphid visualisation - AUGMENTATION EFFECT
 pred2_rq3 <- ggpredict(
   r3_mod_incrop,
@@ -573,11 +729,38 @@ pred3_rq3 <- ggpredict(
 
 
 # 4: colemani - yst aphid visualisation - AUGMENTATION EFFECT
-pred3_rq3 <- ggpredict(
+pred4_rq3 <- ggpredict(
   r3_mod_yst,
   terms = c("yst_aphids [all]", "augmentation"))
 
 
+# Install required packages
+install.packages(c("broom.mixed", "flextable", "officer"))
+library(broom.mixed)  # For tidying mixed models (glmmTMB)
+library(purrr)         # For mapping functions across models
+library(flextable)     # For creating formatted tables
+library(officer)       # For exporting to Word
+
+# List your models (replace with your actual model names)
+models <- list(
+  "RQ1: YST colemani (Augmentation)" = r1_mod_crop,
+  "RQ1: YST colemani (WFS)" = r1_mod_yst,
+  "RQ2: In-Crop Aphids" = r2_mod_crop,
+  "RQ2: YST Aphids" = r2_mod_yst,
+  "RQ3: Interaction" = r3_mod_yst)
+
+# Create a tidy summary table
+model_table <- map_dfr(models, ~ tidy(.x, conf.int = TRUE, effects = "fixed"), .id = "Model") %>%
+  mutate(across(c(estimate, std.error, statistic,conf.low, conf.high), ~ round(., 3)),
+         p.value = round(p.value, 4)) %>%
+  select(Model, term, estimate, std.error, statistic,conf.low, conf.high, p.value)
+view(model_table)
+
+fit_stats <- map_dfr(models, ~ glance(.x), .id = "Model") %>%
+  mutate(across(c(AIC, BIC, logLik), ~ round(., 1)))
+
+full_table <- left_join(model_table, fit_stats, by = "Model")
+view(full_table)
 # random bullshit go ----
 # Generate predictions for each plot
 pred_yst_aug <- ggpredict(r3_mod_yst, terms = c("yst_aphids", "augmentation"))
@@ -604,12 +787,13 @@ p1 <- ggplot(merged_data, aes(x = sum_infested, y = aphidius_colemani)) +
     values = c("#DF6D16", "#1b9e77"),
     labels = c("33m", "83m")) +
   labs(
-    x = "Aphis fabae crop infestations per plot",
+    x = "*Aphis fabae* Abundance<br>(In-Crop Plants)",
     y = "Aphidius colemani Abundance") +
   theme_classic() +
-  theme(legend.position = "bottom")
+  theme(legend.position = "none",axis.title.y = element_markdown(face = "bold"),
+        axis.title.x = element_markdown(face = "bold"))
 p1
-# 2: colemani - incrop aphid visualisation - AUGMENTATION EFFECT ----
+# 2: colemani - incrop aphid visualisation - AUGMENTATION EFFECT
 p2 <- ggplot(merged_data, aes(x = sum_infested, y = aphidius_colemani)) +
   geom_point(aes(color = augmentation), alpha = 0.5) +   # Raw data points
   geom_ribbon(                                           # Model predictions with 95% CI
@@ -624,12 +808,13 @@ p2 <- ggplot(merged_data, aes(x = sum_infested, y = aphidius_colemani)) +
   scale_color_manual(values = c("#DF6D16", "#1b9e77")) +
   scale_fill_manual(values = c("#DF6D16", "#1b9e77")) +
   labs(
-    x = "Incrop Aphis fabae Abundance",
+    x = "In Crop *Aphis fabae* Abundance",
     y = "Aphidius colemani Abundance",
     color = "augmentation",
     fill = "augmentation") +
   theme_classic() +
-  theme(legend.position = "bottom")
+  theme(legend.position = "none",axis.title.y = element_markdown(),
+        axis.title.x = element_markdown(face = "bold"))
 p2
 # 3: colemani - yst aphid visualisation - MARGIN DISTANCE EFFECT
 p3 <- ggplot(merged_data, aes(x = yst_aphids, y = aphidius_colemani)) +
@@ -646,7 +831,7 @@ p3 <- ggplot(merged_data, aes(x = yst_aphids, y = aphidius_colemani)) +
   scale_color_manual(values = c("#DF6D16", "#1b9e77")) +
   scale_fill_manual(values = c("#DF6D16", "#1b9e77")) +
   labs(
-    x = "YST Aphis fabae Abundance",
+    x = "YST *Aphis fabae* Abundance",
     y = "Aphidius colemani Abundance",
     color = "margin_distance",
     fill = "margin_distance"
@@ -658,19 +843,19 @@ p3
 p4 <- ggplot(merged_data, aes(x = yst_aphids, y = aphidius_colemani)) +
   geom_point(aes(color = augmentation), alpha = 0.5) +   # Raw data points
   geom_ribbon(                                              # Model predictions with 95% CI
-    data = pred3_rq3,
+    data = pred4_rq3,
     aes(x = x, y = predicted, ymin = conf.low, ymax = conf.high, fill = group),
     alpha = 0.2) +
   geom_line(
-    data = pred3_rq3,
+    data = pred4_rq3,
     aes(x = x, y = predicted, color = group),
     linewidth = 1
   ) +
   scale_color_manual(values = c("#DF6D16", "#1b9e77")) +
   scale_fill_manual(values = c("#DF6D16", "#1b9e77")) +
   labs(
-    x = "YST Aphis fabae Abundance",
-    y = "Aphidius colemani Abundance",
+    x = "YST *Aphis fabae* Abundance",
+    y = "*Aphidius colemani* Abundance",
     color = "augmentation",
     fill = "augmentation"
   ) +
@@ -679,10 +864,7 @@ p4 <- ggplot(merged_data, aes(x = yst_aphids, y = aphidius_colemani)) +
 p4
 multi_plot <- (p1 + p2) / (p3 + p4) + 
   plot_annotation(
-    title = "Relationship Between Aphid and Parasitoid Wasp Abundance",
-    subtitle = "Stratified by Augmentation and Wildflower Strip (WFS) Distance",
-    tag_levels = "A"
-  ) &
+    tag_levels = "A") &
   theme(
     plot.title = element_text(face = "bold", hjust = 0.5),
     plot.subtitle = element_text(hjust = 0.5)
