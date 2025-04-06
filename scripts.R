@@ -689,20 +689,14 @@ simulateResiduals(r3_mod_yst1) %>% plot() # we going with this to visualise
 simulateResiduals(r3_mod_crop2) %>% plot() # and this one
 simulateResiduals(r3_mod_yst2) %>% plot()
 
-testDispersion(r3_mod_yst2)
-testZeroInflation(r3_mod_yst2)
-testUniformity(r3_mod_yst2)
-testOutliers(r3_mod_yst2)
-
-# spearman's rank correlation
-cor.test(
-  merged_data$sum_infested,
-  merged_data$aphidius_colemani,
-  method = "spearman")  # 'exact = F' made no difference
-cor.test(
-  merged_data$yst_aphids,
-  merged_data$aphidius_colemani,
-  method = "spearman") 
+testDispersion(r3_mod_yst1)
+testZeroInflation(r3_mod_yst1)
+testUniformity(r3_mod_yst1)
+testOutliers(r3_mod_yst1)
+testDispersion(r3_mod_crop2)
+testZeroInflation(r3_mod_crop2)
+testUniformity(r3_mod_crop2)
+testOutliers(r3_mod_crop2)
 # RQ3 visualisations ----
 # Predictions for augmentation effect
 pred_yst1_aug <- ggpredict(r3_mod_yst1,
@@ -885,128 +879,59 @@ View(full_table)
 # Final Model AICcs ----
 AICc(r1_mod_yst,r1_mod_crop, r2_mod_crop, r2_mod_yst,r3_mod_crop2,r3_mod_yst1, wasp_model,glmm_yst,glmm_infested )
 # Final model diagnostic summary table ----
+# RQ1 MODEL 1
+testDispersion(r1_mod_yst) #dispersion = 0.97941, p-value = 0.952
+testZeroInflation(r1_mod_yst) #ratioObsSim = 1.1966, p-value = 0.576
+testUniformity(r1_mod_yst) #D = 0.074571, p-value = 0.9341
+testOutliers(r1_mod_yst) #outliers at both margin(s) = 0, observations = 48, p-value = 1
 
-# 1. Create a function to extract diagnostics for a single model 
-get_model_diagnostics <- function(model, model_name) {
-  # Safely simulate residuals and run tests
-  simulation_output <- tryCatch(
-    simulateResiduals(model, plot = FALSE),
-    error = function(e) return(NULL)
-  )
-  
-  if(is.null(simulation_output)) {
-    return(tibble(
-      Model = model_name,
-      Test = c("Dispersion", "Zero-inflation", "Uniformity", "Outliers"),
-      Statistic = NA_real_,
-      `p-value` = NA_real_,
-      Conclusion = "Test failed"
-    ))
-  }
-  
-  # Safely extract test results
-  safe_test <- function(test_func) {
-    tryCatch(
-      test_func(simulation_output),
-      error = function(e) return(list(statistic = NA, p.value = NA))
-    )
-  }
-  
-  dispersion_test <- safe_test(testDispersion)
-  zero_inflation_test <- safe_test(testZeroInflation)
-  uniformity_test <- safe_test(testUniformity)
-  outlier_test <- safe_test(function(x) testOutliers(x, type = "bootstrap"))
-  
-  # Create output table
-  tibble(
-    Model = model_name,
-    Test = c("Dispersion", "Zero-inflation", "Uniformity", "Outliers"),
-    Statistic = c(
-      round(dispersion_test$statistic, 2),
-      round(zero_inflation_test$statistic, 2),
-      round(uniformity_test$statistic, 3),
-      outlier_test$numOutliers %||% NA  # Handle NULL results
-    ),
-    `p-value` = c(
-      round(dispersion_test$p.value, 3),
-      round(zero_inflation_test$p.value, 3),
-      round(uniformity_test$p.value, 3),
-      round(outlier_test$p.value, 3)
-    ),
-    Conclusion = c(
-      ifelse(dispersion_test$p.value > 0.05 | is.na(dispersion_test$p.value), 
-             "No overdispersion", "Overdispersion"),
-      ifelse(zero_inflation_test$p.value > 0.05 | is.na(zero_inflation_test$p.value),
-             "No excess zeros", "Excess zeros"),
-      ifelse(uniformity_test$p.value > 0.05 | is.na(uniformity_test$p.value),
-             "Residuals uniform", "Non-uniform"),
-      ifelse(outlier_test$p.value > 0.05 | is.na(outlier_test$p.value),
-             "No outliers", "Outliers present")
-    )
-  )
-}
+# RQ1 MODEL 2 (subsequent outputs copied directly into excel table)
+testDispersion(r1_mod_crop)
+testZeroInflation(r1_mod_crop)
+testUniformity(r1_mod_crop)
+testOutliers(r1_mod_crop)
 
-install.packages("knitr")
-library(knitr)
-# 2. Create named list of your models
-model_list2 <- list(
-  "RQ1: A. colemani Crop (Augmentation * WFS)" = r1_mod_crop,
-  "RQ1: A. colemani YST (Augmentation * WFS)" = r1_mod_yst,
-  "RQ2: In-Crop Aphids" = r2_mod_crop,
-  "RQ2: YST Aphids" = r2_mod_yst,
-  "RQ3: YST Aphid-Wasp Interactions" = r3_mod_yst1,  #  YST aphids model
-  "RQ3: In-Crop Aphid-Wasp Interactions" = r3_mod_crop2,  #  crop aphids model
-  "RQ4: A. colemani & WF correlation" = wasp_model,  #  crop aphids model
-  "RQ4: YST A. fabae & WF correlation" = glmm_yst,  #  crop aphids model
-  "RQ4: In-Crop A. fabae & WF correlation" = glmm_infested)  #  crop aphids model
+# RQ2 MODEL 1
+testDispersion(r2_mod_crop)
+testZeroInflation(r2_mod_crop)
+testUniformity(r2_mod_crop)
+testOutliers(r2_mod_crop)
 
+# RQ2 MODEL 2
+testDispersion(r2_mod_yst)
+testZeroInflation(r2_mod_yst)
+testUniformity(r2_mod_yst)
+testOutliers(r2_mod_yst)
 
-# 3. View formatted table
-diagnostics_table %>%
-  knitr::kable(caption = "Model Diagnostic Summary") %>%
-  kableExtra::kable_styling(bootstrap_options = c("striped", "hover"))
+# RQ3 MODEL 1
+testDispersion(r3_mod_yst1)
+testZeroInflation(r3_mod_yst1)
+testUniformity(r3_mod_yst1)
+testOutliers(r3_mod_yst1)
 
+# RQ3 MODEL 2
+testDispersion(r3_mod_crop2)
+testZeroInflation(r3_mod_crop2)
+testUniformity(r3_mod_crop2)
+testOutliers(r3_mod_crop2)
 
-# 3. Create diagnostics table
-diagnostics_table <- imap_dfr(model_list2, ~ get_model_diagnostics(.x, .y))
+# RQ4 MODEL 1
+testDispersion(wasp_model)
+testZeroInflation(wasp_model)
+testUniformity(wasp_model)
+testOutliers(wasp_model)
 
-# 4. View/formatted print
-diagnostics_table %>%
-  mutate(across(where(is.numeric), ~ round(., 3))) %>%
-  knitr::kable(caption = "Model Diagnostic Results")
-# wildflower strip data wrangling ----
+# RQ4 MODEL 2
+testDispersion(glmm_yst)
+testZeroInflation(glmm_yst)
+testUniformity(glmm_yst)
+testOutliers(glmm_yst)
 
-# Convert columns to character
-wfs_data <- wfs_data %>%
-  mutate(across(starts_with("Q") & !ends_with("m_c_r"), as.character)) %>%
-  mutate(across())
-
-# create new column of braun-Blanquet scores
-wildflower_bb <- wfs_data %>%
-   select(`common name`, Species, starts_with("Q") & !ends_with("m_c_r")) %>%
-   pivot_longer(cols = -c(`common name`, Species),
-   names_to = "quadrat",
-   values_to = "braun_blanquet")
-
-# Do the same for mid-point cover values
-
-wildflower_mc <- wfs_data %>%
-  select(`common name`, Species, ends_with("m_c_r")) %>%
-  pivot_longer(cols = -c(`common name`, Species),
-    names_to = "quadrat",
-    values_to = "midpoint_cover"
-    ) %>%
-  mutate(quadrat = gsub("_m_c_r", "", quadrat))
-
-
-# merge the two data sets
-wfs_long <- wildflower_bb %>%
-    left_join(wildflower_mc, by = c("common name", "Species", "quadrat")) %>%
-  arrange(quadrat)
-
-view(wfs_long)
-
-
+# RQ4 MODEL 3
+testDispersion(glmm_infested)
+testZeroInflation(glmm_infested)
+testUniformity(glmm_infested)
+testOutliers(glmm_infested)
 #RQ4:  plot wheeling wildflower influence on species abundance ----
 # wrangling
 inplot_long <- plot_wf_data %>%
@@ -1066,6 +991,7 @@ wasp_model <- glmmTMB(
 summary(wasp_model)
 AICc(wasp_model)
 simulateResiduals(wasp_model) %>% plot()
+
 # aphid model iterations ----
 # For YST aphids
 glmm_yst <- glmmTMB(
@@ -1204,6 +1130,38 @@ combined_plots <- plot_wasp / (plot_yst + plot_infested) +
   )
 
 combined_plots
+
+# wildflower strip data wrangling ----
+
+# Convert columns to character
+wfs_data <- wfs_data %>%
+  mutate(across(starts_with("Q") & !ends_with("m_c_r"), as.character)) %>%
+  mutate(across())
+
+# create new column of braun-Blanquet scores
+wildflower_bb <- wfs_data %>%
+  select(`common name`, Species, starts_with("Q") & !ends_with("m_c_r")) %>%
+  pivot_longer(cols = -c(`common name`, Species),
+               names_to = "quadrat",
+               values_to = "braun_blanquet")
+
+# Do the same for mid-point cover values
+
+wildflower_mc <- wfs_data %>%
+  select(`common name`, Species, ends_with("m_c_r")) %>%
+  pivot_longer(cols = -c(`common name`, Species),
+               names_to = "quadrat",
+               values_to = "midpoint_cover"
+  ) %>%
+  mutate(quadrat = gsub("_m_c_r", "", quadrat))
+
+
+# merge the two data sets
+wfs_long <- wildflower_bb %>%
+  left_join(wildflower_mc, by = c("common name", "Species", "quadrat")) %>%
+  arrange(quadrat)
+
+view(wfs_long)
 
 # calculating wfs species importance values ----
 species_summary <- wfs_long %>%
