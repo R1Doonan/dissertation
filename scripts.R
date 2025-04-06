@@ -659,11 +659,7 @@ ggplot(r2_pred_yst, aes(x = x, y = predicted, fill = group)) +
 # RQ3: wasp -  aphid relationship MODELS----
 #  incrop aphid data (same models)
 # For A. colemani ~ aphid abundance, testing interactions
-r3_mod_incrop <- glmmTMB(aphidius_colemani ~ augmentation * sum_infested + margin_distance * sum_infested +
-    (1 | plot_id) + (1 | time_point),family = nbinom2,data = merged_data)
 
-r3_mod_incrop <- glmmTMB(aphidius_colemani ~ augmentation * yst_aphids + margin_distance * yst_aphids +
-                           (1 | plot_id) + (1 | time_point),family = nbinom2, data = merged_data)
 # For A. fabae ~ parasitoid abundance, testing interactions
 r3_mod_yst1 <- glmmTMB(yst_aphids ~ augmentation * aphidius_colemani + margin_distance * aphidius_colemani +
     (1 | plot_id) + (1 | time_point),
@@ -859,30 +855,125 @@ dist_figure <- (p_dist_crop | p_dist_yst) +
   plot_annotation(tag_levels = "A",theme = theme(legend.position = "bottom"))
 dist_figure
 
-# Table for appendicies ----------
+# Final model outputs  for appendicies ----------
 models <- list(
-  "RQ1: YST colemani (Augmentation)" = r1_mod_crop,
-  "RQ1: YST colemani (WFS)" = r1_mod_yst,
+  "RQ1: A. colemani Crop (Augmentation * WFS)" = r1_mod_crop,
+  "RQ1: A. colemani YST (Augmentation * WFS)" = r1_mod_yst,
   "RQ2: In-Crop Aphids" = r2_mod_crop,
   "RQ2: YST Aphids" = r2_mod_yst,
-  "RQ3: YST Aphid-Wasp Interactions" = r3_mod_yst1,  # Your YST aphids model
-  "RQ3: In-Crop Aphid-Wasp Interactions" = r3_mod_crop2)  # Your crop aphids model
-
-# Create a model output summary table
+  "RQ3: YST Aphid-Wasp Interactions" = r3_mod_yst1,  #  YST aphids model
+  "RQ3: In-Crop Aphid-Wasp Interactions" = r3_mod_crop2,  #  crop aphids model
+  "RQ4: A. colemani & WF correlation" = wasp_model,  #  crop aphids model
+  "RQ4: YST A. fabae & WF correlation" = glmm_yst,  #  crop aphids model
+  "RQ4: In-Crop A. fabae & WF correlation" = glmm_infested)  #  crop aphids model
+  
+# Create summary table
 model_table <- map_dfr(models, ~ broom.mixed::tidy(.x, conf.int = TRUE, effects = "fixed"), .id = "Model") %>%
   mutate(across(c(estimate, std.error, statistic, conf.low, conf.high), ~ round(., 3)),
          p.value = round(p.value, 4)) %>%
   select(Model, term, estimate, std.error, statistic, conf.low, conf.high, p.value)
 
-# Get fit statistics
+# Get BIC and LogLiklihood statistics
 fit_stats <- map_dfr(models, ~ broom.mixed::glance(.x), .id = "Model") %>%
-  mutate(across(c(AIC, BIC, logLik), ~ round(., 1)))
+  mutate(across(c( BIC, logLik), ~ round(., 1)))
 
 # Combine tables
 full_table <- left_join(model_table, fit_stats, by = "Model")
 
 # View final table
 View(full_table)
+# Final Model AICcs ----
+AICc(r1_mod_yst,r1_mod_crop, r2_mod_crop, r2_mod_yst,r3_mod_crop2,r3_mod_yst1, wasp_model,glmm_yst,glmm_infested )
+# Final model diagnostic summary table ----
+
+# 1. Create a function to extract diagnostics for a single model 
+get_model_diagnostics <- function(model, model_name) {
+  # Safely simulate residuals and run tests
+  simulation_output <- tryCatch(
+    simulateResiduals(model, plot = FALSE),
+    error = function(e) return(NULL)
+  )
+  
+  if(is.null(simulation_output)) {
+    return(tibble(
+      Model = model_name,
+      Test = c("Dispersion", "Zero-inflation", "Uniformity", "Outliers"),
+      Statistic = NA_real_,
+      `p-value` = NA_real_,
+      Conclusion = "Test failed"
+    ))
+  }
+  
+  # Safely extract test results
+  safe_test <- function(test_func) {
+    tryCatch(
+      test_func(simulation_output),
+      error = function(e) return(list(statistic = NA, p.value = NA))
+    )
+  }
+  
+  dispersion_test <- safe_test(testDispersion)
+  zero_inflation_test <- safe_test(testZeroInflation)
+  uniformity_test <- safe_test(testUniformity)
+  outlier_test <- safe_test(function(x) testOutliers(x, type = "bootstrap"))
+  
+  # Create output table
+  tibble(
+    Model = model_name,
+    Test = c("Dispersion", "Zero-inflation", "Uniformity", "Outliers"),
+    Statistic = c(
+      round(dispersion_test$statistic, 2),
+      round(zero_inflation_test$statistic, 2),
+      round(uniformity_test$statistic, 3),
+      outlier_test$numOutliers %||% NA  # Handle NULL results
+    ),
+    `p-value` = c(
+      round(dispersion_test$p.value, 3),
+      round(zero_inflation_test$p.value, 3),
+      round(uniformity_test$p.value, 3),
+      round(outlier_test$p.value, 3)
+    ),
+    Conclusion = c(
+      ifelse(dispersion_test$p.value > 0.05 | is.na(dispersion_test$p.value), 
+             "No overdispersion", "Overdispersion"),
+      ifelse(zero_inflation_test$p.value > 0.05 | is.na(zero_inflation_test$p.value),
+             "No excess zeros", "Excess zeros"),
+      ifelse(uniformity_test$p.value > 0.05 | is.na(uniformity_test$p.value),
+             "Residuals uniform", "Non-uniform"),
+      ifelse(outlier_test$p.value > 0.05 | is.na(outlier_test$p.value),
+             "No outliers", "Outliers present")
+    )
+  )
+}
+
+install.packages("knitr")
+library(knitr)
+# 2. Create named list of your models
+model_list2 <- list(
+  "RQ1: A. colemani Crop (Augmentation * WFS)" = r1_mod_crop,
+  "RQ1: A. colemani YST (Augmentation * WFS)" = r1_mod_yst,
+  "RQ2: In-Crop Aphids" = r2_mod_crop,
+  "RQ2: YST Aphids" = r2_mod_yst,
+  "RQ3: YST Aphid-Wasp Interactions" = r3_mod_yst1,  #  YST aphids model
+  "RQ3: In-Crop Aphid-Wasp Interactions" = r3_mod_crop2,  #  crop aphids model
+  "RQ4: A. colemani & WF correlation" = wasp_model,  #  crop aphids model
+  "RQ4: YST A. fabae & WF correlation" = glmm_yst,  #  crop aphids model
+  "RQ4: In-Crop A. fabae & WF correlation" = glmm_infested)  #  crop aphids model
+
+
+# 3. View formatted table
+diagnostics_table %>%
+  knitr::kable(caption = "Model Diagnostic Summary") %>%
+  kableExtra::kable_styling(bootstrap_options = c("striped", "hover"))
+
+
+# 3. Create diagnostics table
+diagnostics_table <- imap_dfr(model_list2, ~ get_model_diagnostics(.x, .y))
+
+# 4. View/formatted print
+diagnostics_table %>%
+  mutate(across(where(is.numeric), ~ round(., 3))) %>%
+  knitr::kable(caption = "Model Diagnostic Results")
 # wildflower strip data wrangling ----
 
 # Convert columns to character
@@ -915,38 +1006,9 @@ wfs_long <- wildflower_bb %>%
 
 view(wfs_long)
 
-# calculating wfs species importance values (no longer useful for results)----
-species_summary <- wfs_long %>%
-  group_by(Species) %>%
-  summarise(
-    plots_of_occurrence = n_distinct(quadrat),
-    total_cover = sum(midpoint_cover, na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
-  mutate(
-    percent_frequency = (plots_of_occurrence / max(plots_of_occurrence)) * 100,
-    relative_frequency = (percent_frequency / sum(percent_frequency)) * 100,
-    relative_cover = (total_cover / sum(total_cover)) * 100,
-    importance_value = relative_frequency + relative_cover) %>%
-  arrange(desc(importance_value))
 
-View(species_summary)
-# Importance value: Fagopyrum esculentum = 74.74453
-# Importance value: Phacelia tanacetifolia = 62.57908
-# Importance value: Trifolium incarnatum = 21.62633
-# Importance value: Trifolium pratense = 20.69151
-# Importance value: Myosotis sylvatica = 20.35856
-
-# Average Braun-Blanquet (midpoint cover) per species across all 10 WFS quadrats
-wfs_sum_cover <- wfs_long %>%
-  group_by(Species) %>% # i think this might be incorrect but the index value looks much smaller without it
-  summarise(
-    sum_midpoint_cover = sum(midpoint_cover, na.rm = TRUE),
-    .groups = "drop"
-  )
-
-# plot wheeling wildflower data wrangling ----
-
+#RQ4:  plot wheeling wildflower influence on species abundance ----
+# wrangling
 inplot_long <- plot_wf_data %>%
   mutate(across(starts_with("P"), as.character)) %>%
   pivot_longer(cols = starts_with("P"),
@@ -954,7 +1016,7 @@ inplot_long <- plot_wf_data %>%
     values_to = "braun_blanquet") %>%
   separate(col = plot_position,
     into = c("plot_id", "column"), 
-    sep = "C") %>%                        # Get rid of text
+    sep = "C") %>%                        # Get rid of text and separate into 2 variables
 
   mutate(
     midpoint_cover = case_when(
@@ -990,86 +1052,189 @@ str(merged_data)
 plot_cover$plot_id <- gsub("P", "", plot_cover$plot_id)
 plot_cover$plot_id <- as.factor(plot_cover$plot_id)
 
-#
-
 # Merge datasets
 merged_data2 <- merge(merged_data, plot_cover, by = "plot_id", all.x = TRUE)
 view(merged_data2)
 
-# model iterations 
+# wasp model iterations ----
 
 wasp_model <- glmmTMB(
-  aphidius_colemani ~ p_quadrat_cover + augmentation * margin_distance + 
-    (1 | time_point) + (1 | plot_id),
-  family = nbinom2,  # Use nbinom2 if overdispersed, else poisson
-  data = merged_data2)
-aphid_model <- glmmTMB(
-  yst_aphids ~ p_quadrat_cover + augmentation * margin_distance + 
+  aphidius_colemani ~ p_quadrat_cover + augmentation + margin_distance + 
     (1 | time_point) + (1 | plot_id),
   family = nbinom2,  # Use nbinom2 if overdispersed, else poisson
   data = merged_data2)
 summary(wasp_model)
-AICc(wasp_model, aphid_model)
-simulateResiduals(aphid_model) %>% plot()
-plot_agg <- merged_data2 %>%
-  group_by(plot_id, p_quadrat_cover, margin_distance, augmentation) %>%
-  summarise(mean_wasp = mean(aphidius_colemani, na.rm = TRUE))
-# Scatter plot with trendline:
-ggplot(plot_agg, aes(x = p_quadrat_cover, y = mean_wasp)) +
-  geom_point(aes(color = margin_distance, shape = augmentation), size = 2.5) +
-  geom_smooth(method = "lm", formula = y ~ x, color = "black") +
+AICc(wasp_model)
+simulateResiduals(wasp_model) %>% plot()
+# aphid model iterations ----
+# For YST aphids
+glmm_yst <- glmmTMB(
+  yst_aphids ~ p_quadrat_cover + augmentation + margin_distance + (1 | time_point) + (1 | plot_id),
+  family = nbinom2,  
+  data = merged_data2)
+
+summary(glmm_yst)
+AICc(glmm_yst)
+simulateResiduals(glmm_yst) %>% plot()
+
+# For sum_infested (in-crop aphids)
+glmm_infested <- glmmTMB(
+  sum_infested ~ p_quadrat_cover + augmentation + margin_distance + (1 | time_point) + (1 | plot_id),
+  family = nbinom2,
+  data = merged_data2)
+summary(glmm_infested)
+AICc(glmm_infested)
+simulateResiduals(glmm_infested) %>% plot()
+# 1. Wasp Abundance (Aphidius colemani) ----
+wasp_pred <- ggpredict(wasp_model, terms = "p_quadrat_cover[0:210]")
+
+plot_wasp <- ggplot() +
+  geom_point(data = merged_data2,
+             aes(x = p_quadrat_cover, y = aphidius_colemani, color = margin_distance, shape = augmentation),
+             size = 2.5, stroke = 0.8, alpha = 0.6 ) +
+  geom_line(
+    data = wasp_pred,
+    aes(x = x, y = predicted),
+    color = "navy", linewidth = 1 ) +
+  geom_ribbon(
+    data = wasp_pred,
+    aes(x = x, ymin = conf.low, ymax = conf.high),
+    fill = "navy", alpha = 0.2 ) +
   labs(
-    x = "Wildflower Cover (per-plot index)",
-    y = "Mean Aphidius colemani Abundance",
-    title = "Wildflower Cover vs. Parasitoid Wasp Abundance"
-  ) +
+    x = "Wildflower Cover <br>(cm² Index)",
+    y = "*Aphidius colemani* Abundance") +
+  xlim(0, 210) +
   theme_classic() +
-  theme(axis.title.y = element_markdown(face = "bold"),
-axis.title.x = element_markdown(face = "bold"),
-legend.position = "bottom")
+  theme(
+    axis.title.y = element_markdown(face = "bold", size = 10),
+    axis.title.x = element_markdown(face = "bold", size = 10),
+    legend.position = "none" ) +
+  # Color scale for margin distance (33m = green, 83m = orange)
+  scale_color_manual(
+    name = "Margin Distance",
+    values = c("33" = "#1b9e77", "83" = "#DF6D16"), 
+    labels = c("33 m", "83 m") ) +
+  # Shape scale for augmentation (present = circle, absent = triangle)
+  scale_shape_manual(
+    name = "Augmentation",
+    values = c("present" = 16, "absent" = 17),  # 16 = circle, 17 = triangle
+    labels = c("Present", "Absent"))
 
-# lots merged_data2# lots of unneccessary inplot data manipulations ----
-unique(plot_wf_data$Species) 
-library(dplyr)
+plot_wasp
+# 2.YST Aphids ----
 
-# Calculate global IVs for all species
-global_iv <- inplot_long %>%
+yst_pred <- ggpredict(glmm_yst, terms = "p_quadrat_cover[0:210]")
+
+plot_yst <- ggplot() +
+  geom_point(data = merged_data2,
+             aes(x = p_quadrat_cover, y = yst_aphids, color = margin_distance, shape = augmentation),
+             size = 2.5, stroke = 0.8, alpha = 0.6 ) +
+  geom_line(
+    data = yst_pred,
+    aes(x = x, y = predicted),
+    color = "navy", linewidth = 1 ) +
+  geom_ribbon(
+    data = yst_pred,
+    aes(x = x, ymin = conf.low, ymax = conf.high),
+    fill = "navy", alpha = 0.2 ) +
+  labs(
+    x = "Wildflower Cover <br>(cm² Index)",
+    y = "*Aphis fabae* Abundance <br> (Yellow Sticky Traps)") +
+  xlim(0, 210) +
+  theme_classic() +
+  theme(
+    axis.title.y = element_markdown(face = "bold", size = 10),
+    axis.title.x = element_markdown(face = "bold", size = 10),
+    legend.position = "none" ) +
+  # Color scale for margin distance (33m = green, 83m = orange)
+  scale_color_manual(
+    name = "Margin Distance",
+    values = c("33" = "#1b9e77", "83" = "#DF6D16"), 
+    labels = c("33 m", "83 m") ) +
+  # Shape scale for augmentation (present = circle, absent = triangle)
+  scale_shape_manual(
+    name = "Augmentation",
+    values = c("present" = 16, "absent" = 17),  # 16 = circle, 17 = triangle
+    labels = c("Present", "Absent"))
+plot_yst
+# 3. Crop Infestations (Aphis fabae in crop) ----
+infested_pred <- ggpredict(glmm_infested, terms = "p_quadrat_cover[0:210]")
+
+plot_infested <- ggplot() +
+  geom_point(data = merged_data2,
+             aes(x = p_quadrat_cover, y = sum_infested, color = margin_distance, shape = augmentation),
+             size = 2.5, stroke = 0.8, alpha = 0.6 ) +
+  geom_line(
+    data = infested_pred,
+    aes(x = x, y = predicted),
+    color = "navy", linewidth = 1 ) +
+  geom_ribbon(
+    data = infested_pred,
+    aes(x = x, ymin = conf.low, ymax = conf.high),
+    fill = "navy", alpha = 0.2 ) +
+  labs(
+    x = "Wildflower Cover <br>(cm² Index)",
+    y = "*Aphis fabae* Abundance<br>(Crop Infestations)") +
+  xlim(0, 210) +
+  theme_classic() +
+  theme(
+    axis.title.y = element_markdown(face = "bold", size = 10),
+    axis.title.x = element_markdown(face = "bold", size = 10),
+    legend.position = "none" ) +
+  # Color scale for margin distance (33m = green, 83m = orange)
+  scale_color_manual(
+    name = "Margin Distance",
+    values = c("33" = "#1b9e77", "83" = "#DF6D16"), 
+    labels = c("33 m", "83 m") ) +
+  # Shape scale for augmentation (present = circle, absent = triangle)
+  scale_shape_manual(
+    name = "Augmentation",
+    values = c("present" = 16, "absent" = 17),  # 16 = circle, 17 = triangle
+    labels = c("Present", "Absent"))
+plot_infested
+# 3. Combine Plots with Unified Legends ----
+combined_plots <- plot_wasp / (plot_yst + plot_infested) +
+  plot_layout(guides = "collect") +
+  plot_annotation(tag_levels = "A") &
+  theme(
+    legend.position = "bottom",
+    legend.title = element_text(face = "bold", size = 10),
+    legend.text = element_text(size = 9),
+    plot.tag = element_text(face = "bold", size = 12)
+  )
+
+combined_plots
+
+# calculating wfs species importance values ----
+species_summary <- wfs_long %>%
   group_by(Species) %>%
   summarise(
-    plots_of_occurrence = n_distinct(plot_id),
+    plots_of_occurrence = n_distinct(quadrat),
     total_cover = sum(midpoint_cover, na.rm = TRUE),
     .groups = "drop"
   ) %>%
   mutate(
-    relative_frequency = (plots_of_occurrence / 16) * 100,
+    percent_frequency = (plots_of_occurrence / max(plots_of_occurrence)) * 100,
+    relative_frequency = (percent_frequency / sum(percent_frequency)) * 100,
     relative_cover = (total_cover / sum(total_cover)) * 100,
-    global_iv = relative_frequency + relative_cover
-  )
-view(global_iv)
-# Assign global IVs to each plot and calculate plot-level score
-plot_scores <- inplot_long %>%
-  left_join(global_iv %>% select(Species, global_iv), by = "Species") %>%
-  group_by(plot_id) %>%
+    importance_value = relative_frequency + relative_cover) %>%
+  arrange(desc(importance_value))
+
+View(species_summary)
+# Importance value: Fagopyrum esculentum = 74.74453
+# Importance value: Phacelia tanacetifolia = 62.57908
+# Importance value: Trifolium incarnatum = 21.62633
+# Importance value: Trifolium pratense = 20.69151
+# Importance value: Myosotis sylvatica = 20.35856
+
+# Average Braun-Blanquet (midpoint cover) per species across all 10 WFS quadrats
+wfs_sum_cover <- wfs_long %>%
+  group_by(Species) %>% # i think this might be incorrect but the index value looks much smaller without it
   summarise(
-    plot_iv = sum(global_iv, na.rm = TRUE),
-    total_cover = sum(midpoint_cover, na.rm = TRUE)
-  )
-
-
-
-
-# View plot-level scores
-View(plot_scores)
-
-
-# Average Braun-Blanquet (midpoint cover) per species across 5 quadrats per plot
-inplot_avg <- plot_wf_data %>%
-  group_by(plot_id, Species) %>%  # Group by plot and species
-  summarise(
-    avg_midpoint_cover = mean(midpoint_cover, na.rm = TRUE),
+    sum_midpoint_cover = sum(midpoint_cover, na.rm = TRUE),
     .groups = "drop"
   )
-view(inplot_avg)
+
 # Calculate Shannon diversity per plot UNNECCESSARY STUFF!!!!!!!!!!---- 
 inplot_diversity <- inplot_avg %>%
   group_by(plot_id) %>%
