@@ -702,7 +702,7 @@ testOutliers(r3_mod_yst2)
 cor.test(
   merged_data$sum_infested,
   merged_data$aphidius_colemani,
-  method = "spearman")  # Use FALSE for large datasets or ties
+  method = "spearman")  # 'exact = F' made no difference
 cor.test(
   merged_data$yst_aphids,
   merged_data$aphidius_colemani,
@@ -757,8 +757,7 @@ p_aug_crop <- ggplot(merged_data, aes(x = sum_infested, y = aphidius_colemani)) 
   theme(
     axis.title.y = element_markdown(face = "bold"),
     axis.title.x = element_markdown(face = "bold"),
-    legend.position = "none"
-  )
+    legend.position = "none")
 
 # Panel B: Augmentation effect on YST aphids
 p_aug_yst <- ggplot(merged_data, aes(x = yst_aphids, y = aphidius_colemani)) +
@@ -773,6 +772,7 @@ p_aug_yst <- ggplot(merged_data, aes(x = yst_aphids, y = aphidius_colemani)) +
     aes(x = x, y = predicted, color = group),
     linewidth = 1.2
   ) +
+  coord_cartesian(ylim = c(0, 30)) +  # Zooms without removing data
   scale_color_manual(
     name = "Augmentation",
     values = c("#CB4154", "#87CEEB"),
@@ -840,6 +840,7 @@ p_dist_yst <- ggplot(merged_data, aes(x = yst_aphids, y = aphidius_colemani)) +
     aes(x = x, y = predicted, color = group),
     linewidth = 1
   ) +
+  coord_cartesian(ylim = c(0, 30)) +  # Zooms without removing data
   scale_color_manual(values = c("#1b9e77","#DF6D16")) +
   scale_fill_manual(values = c("#1b9e77","#DF6D16")) +
   labs(
@@ -976,30 +977,58 @@ quadrat_cover <- inplot_long %>%
 view(quadrat_cover)
 plot_cover <- quadrat_cover %>%
   group_by(plot_id) %>%
-  summarise(mean_wildflower_cover_pct = mean(total_quadrat_cover, na.rm = TRUE))
+  summarise(p_quadrat_cover = sum(total_quadrat_cover, na.rm = TRUE))
+
+#scaled_cover <- (total_quadrat_cover/7500)
+# wildflower proxy index
 
 view(plot_cover)
-str(quadrat_cover)
+str(plot_cover)
+str(merged_data)
 # add to merged data 
-merged_data2 <- inner_join(
-  merged_data,
-  plot_cover,
-  by = "plot_id")
+# Remove "P" from plot_id and convert to factor
+plot_cover$plot_id <- gsub("P", "", plot_cover$plot_id)
+plot_cover$plot_id <- as.factor(plot_cover$plot_id)
+
+#
+
+# Merge datasets
+merged_data2 <- merge(merged_data, plot_cover, by = "plot_id", all.x = TRUE)
 view(merged_data2)
 
-# model iterations in lme4
-mod1 <- glmer.nb(
-  mean_colemani ~ aphid_mean_infested * mean_wildflower_cover_pct + (1|plot_id),
+# model iterations 
+
+wasp_model <- glmmTMB(
+  aphidius_colemani ~ p_quadrat_cover + augmentation * margin_distance + 
+    (1 | time_point) + (1 | plot_id),
+  family = nbinom2,  # Use nbinom2 if overdispersed, else poisson
   data = merged_data2)
-summary(mod1)
-plot(mod1)
-mod1 <- glmer.nb(
-  mean_colemani ~ aphid_mean_infested * mean_wildflower_cover_pct + (1|plot_id),
+aphid_model <- glmmTMB(
+  yst_aphids ~ p_quadrat_cover + augmentation * margin_distance + 
+    (1 | time_point) + (1 | plot_id),
+  family = nbinom2,  # Use nbinom2 if overdispersed, else poisson
   data = merged_data2)
+summary(wasp_model)
+AICc(wasp_model, aphid_model)
+simulateResiduals(aphid_model) %>% plot()
+plot_agg <- merged_data2 %>%
+  group_by(plot_id, p_quadrat_cover, margin_distance, augmentation) %>%
+  summarise(mean_wasp = mean(aphidius_colemani, na.rm = TRUE))
+# Scatter plot with trendline:
+ggplot(plot_agg, aes(x = p_quadrat_cover, y = mean_wasp)) +
+  geom_point(aes(color = margin_distance, shape = augmentation), size = 2.5) +
+  geom_smooth(method = "lm", formula = y ~ x, color = "black") +
+  labs(
+    x = "Wildflower Cover (per-plot index)",
+    y = "Mean Aphidius colemani Abundance",
+    title = "Wildflower Cover vs. Parasitoid Wasp Abundance"
+  ) +
+  theme_classic() +
+  theme(axis.title.y = element_markdown(face = "bold"),
+axis.title.x = element_markdown(face = "bold"),
+legend.position = "bottom")
 
-
-
-# lots of unneccessary inplot data manipulations ----
+# lots merged_data2# lots of unneccessary inplot data manipulations ----
 unique(plot_wf_data$Species) 
 library(dplyr)
 
