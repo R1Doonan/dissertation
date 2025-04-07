@@ -849,89 +849,6 @@ dist_figure <- (p_dist_crop | p_dist_yst) +
   plot_annotation(tag_levels = "A",theme = theme(legend.position = "bottom"))
 dist_figure
 
-# Final model outputs  for appendicies ----------
-models <- list(
-  "RQ1: A. colemani Crop (Augmentation * WFS)" = r1_mod_crop,
-  "RQ1: A. colemani YST (Augmentation * WFS)" = r1_mod_yst,
-  "RQ2: In-Crop Aphids" = r2_mod_crop,
-  "RQ2: YST Aphids" = r2_mod_yst,
-  "RQ3: YST Aphid-Wasp Interactions" = r3_mod_yst1,  #  YST aphids model
-  "RQ3: In-Crop Aphid-Wasp Interactions" = r3_mod_crop2,  #  crop aphids model
-  "RQ4: A. colemani & WF correlation" = wasp_model,  #  crop aphids model
-  "RQ4: YST A. fabae & WF correlation" = glmm_yst,  #  crop aphids model
-  "RQ4: In-Crop A. fabae & WF correlation" = glmm_infested)  #  crop aphids model
-  
-# Create summary table
-model_table <- map_dfr(models, ~ broom.mixed::tidy(.x, conf.int = TRUE, effects = "fixed"), .id = "Model") %>%
-  mutate(across(c(estimate, std.error, statistic, conf.low, conf.high), ~ round(., 3)),
-         p.value = round(p.value, 4)) %>%
-  select(Model, term, estimate, std.error, statistic, conf.low, conf.high, p.value)
-
-# Get BIC and LogLiklihood statistics
-fit_stats <- map_dfr(models, ~ broom.mixed::glance(.x), .id = "Model") %>%
-  mutate(across(c( BIC, logLik), ~ round(., 1)))
-
-# Combine tables
-full_table <- left_join(model_table, fit_stats, by = "Model")
-
-# View final table
-View(full_table)
-# Final Model AICcs ----
-AICc(r1_mod_yst,r1_mod_crop, r2_mod_crop, r2_mod_yst,r3_mod_crop2,r3_mod_yst1, wasp_model,glmm_yst,glmm_infested )
-# Final model diagnostic summary table ----
-# RQ1 MODEL 1
-testDispersion(r1_mod_yst) #dispersion = 0.97941, p-value = 0.952
-testZeroInflation(r1_mod_yst) #ratioObsSim = 1.1966, p-value = 0.576
-testUniformity(r1_mod_yst) #D = 0.074571, p-value = 0.9341
-testOutliers(r1_mod_yst) #outliers at both margin(s) = 0, observations = 48, p-value = 1
-
-# RQ1 MODEL 2 (subsequent outputs copied directly into excel table)
-testDispersion(r1_mod_crop)
-testZeroInflation(r1_mod_crop)
-testUniformity(r1_mod_crop)
-testOutliers(r1_mod_crop)
-
-# RQ2 MODEL 1
-testDispersion(r2_mod_crop)
-testZeroInflation(r2_mod_crop)
-testUniformity(r2_mod_crop)
-testOutliers(r2_mod_crop)
-
-# RQ2 MODEL 2
-testDispersion(r2_mod_yst)
-testZeroInflation(r2_mod_yst)
-testUniformity(r2_mod_yst)
-testOutliers(r2_mod_yst)
-
-# RQ3 MODEL 1
-testDispersion(r3_mod_yst1)
-testZeroInflation(r3_mod_yst1)
-testUniformity(r3_mod_yst1)
-testOutliers(r3_mod_yst1)
-
-# RQ3 MODEL 2
-testDispersion(r3_mod_crop2)
-testZeroInflation(r3_mod_crop2)
-testUniformity(r3_mod_crop2)
-testOutliers(r3_mod_crop2)
-
-# RQ4 MODEL 1
-testDispersion(wasp_model)
-testZeroInflation(wasp_model)
-testUniformity(wasp_model)
-testOutliers(wasp_model)
-
-# RQ4 MODEL 2
-testDispersion(glmm_yst)
-testZeroInflation(glmm_yst)
-testUniformity(glmm_yst)
-testOutliers(glmm_yst)
-
-# RQ4 MODEL 3
-testDispersion(glmm_infested)
-testZeroInflation(glmm_infested)
-testUniformity(glmm_infested)
-testOutliers(glmm_infested)
 #RQ4:  plot wheeling wildflower influence on species abundance ----
 # wrangling
 inplot_long <- plot_wf_data %>%
@@ -1131,6 +1048,89 @@ combined_plots <- plot_wasp / (plot_yst + plot_infested) +
 
 combined_plots
 
+# Final model outputs  for appendicies ----------
+models <- list(
+  "RQ1: A. colemani Crop (Augmentation * WFS)" = r1_mod_crop,
+  "RQ1: A. colemani YST (Augmentation * WFS)" = r1_mod_yst,
+  "RQ2: In-Crop Aphids" = r2_mod_crop,
+  "RQ2: YST Aphids" = r2_mod_yst,
+  "RQ3: YST Aphid-Wasp Interactions" = r3_mod_yst1,  #  YST aphids model
+  "RQ3: In-Crop Aphid-Wasp Interactions" = r3_mod_crop2,  #  crop aphids model
+  "RQ4: A. colemani & WF correlation" = wasp_model,  #  crop aphids model
+  "RQ4: YST A. fabae & WF correlation" = glmm_yst,  #  crop aphids model
+  "RQ4: In-Crop A. fabae & WF correlation" = glmm_infested)  #  crop aphids model
+
+# Create summary table
+model_table <- map_dfr(models, ~ broom.mixed::tidy(.x, conf.int = TRUE, effects = "fixed"), .id = "Model") %>%
+  mutate(across(c(estimate, std.error, statistic, conf.low, conf.high), ~ round(., 3)),
+         p.value = round(p.value, 4)) %>%
+  select(Model, term, estimate, std.error, statistic, conf.low, conf.high, p.value)
+
+# Get BIC and LogLiklihood statistics
+fit_stats <- map_dfr(models, ~ broom.mixed::glance(.x), .id = "Model") %>%
+  mutate(across(c( BIC, logLik), ~ round(., 1)))
+
+# Combine tables
+full_table <- left_join(model_table, fit_stats, by = "Model")
+
+# View final table
+View(full_table)
+# Final Model AICcs ----
+AICc(r1_mod_yst,r1_mod_crop, r2_mod_crop, r2_mod_yst,r3_mod_crop2,r3_mod_yst1, wasp_model,glmm_yst,glmm_infested )
+# Final model diagnostic summary table ----
+# RQ1 MODEL 1
+testDispersion(r1_mod_yst) #dispersion = 0.97941, p-value = 0.952
+testZeroInflation(r1_mod_yst) #ratioObsSim = 1.1966, p-value = 0.576
+testUniformity(r1_mod_yst) #D = 0.074571, p-value = 0.9341
+testOutliers(r1_mod_yst) #outliers at both margin(s) = 0, observations = 48, p-value = 1
+
+# RQ1 MODEL 2 (subsequent outputs copied directly into excel table)
+testDispersion(r1_mod_crop)
+testZeroInflation(r1_mod_crop)
+testUniformity(r1_mod_crop)
+testOutliers(r1_mod_crop)
+
+# RQ2 MODEL 1
+testDispersion(r2_mod_crop)
+testZeroInflation(r2_mod_crop)
+testUniformity(r2_mod_crop)
+testOutliers(r2_mod_crop)
+
+# RQ2 MODEL 2
+testDispersion(r2_mod_yst)
+testZeroInflation(r2_mod_yst)
+testUniformity(r2_mod_yst)
+testOutliers(r2_mod_yst)
+
+# RQ3 MODEL 1
+testDispersion(r3_mod_yst1)
+testZeroInflation(r3_mod_yst1)
+testUniformity(r3_mod_yst1)
+testOutliers(r3_mod_yst1)
+
+# RQ3 MODEL 2
+testDispersion(r3_mod_crop2)
+testZeroInflation(r3_mod_crop2)
+testUniformity(r3_mod_crop2)
+testOutliers(r3_mod_crop2)
+
+# RQ4 MODEL 1
+testDispersion(wasp_model)
+testZeroInflation(wasp_model)
+testUniformity(wasp_model)
+testOutliers(wasp_model)
+
+# RQ4 MODEL 2
+testDispersion(glmm_yst)
+testZeroInflation(glmm_yst)
+testUniformity(glmm_yst)
+testOutliers(glmm_yst)
+
+# RQ4 MODEL 3
+testDispersion(glmm_infested)
+testZeroInflation(glmm_infested)
+testUniformity(glmm_infested)
+testOutliers(glmm_infested)
 # wildflower strip data wrangling ----
 
 # Convert columns to character
