@@ -2,3 +2,4 @@
 ### Ruaraidh Doonan
 #
 ## R studio scripts for data EDA & analysis found in document "scripts.R"
+### Figures were saved onto desktop
