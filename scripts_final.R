@@ -43,7 +43,7 @@ str(wasp_data)
 str(aphid_data)
 str(plot_wf_data)
 atr(wfs_data)
-# cleaning ----
+# Cleaning ----
 wasp_data <- wasp_data %>% 
   mutate(plot_id = as.numeric(gsub("P", "", plot_id))) %>%   # Convert to numeric and remove "P" from plot_id data
   mutate(across(c(plot_id,set_no, time_point,n_treatment, crop, margin_distance, augmentation), as.factor))
@@ -73,7 +73,7 @@ merged_data <- inner_join(
 view(merged_data)
 str(merged_data)
 
-# preliminary analysis ----
+# Exploratory Data Analysis ----
 # assess distributions of response and predictor variables
 hist(merged_data$aphidius_colemani)
 shapiro.test(merged_data$aphidius_colemani)
@@ -324,7 +324,7 @@ summary(r2_mod_crop)$sigma  # For glmmTMB models
 AICc(r2_mod_crop, r2_mod_yst) # 336.34
 
 # Model for YST aphids
-# negative binomial for interaction term
+
 r2_mod_yst <- glmmTMB(
   yst_aphids ~ augmentation * margin_distance  + aphidius_colemani +(1 | plot_id) + (1 | time_point),
   family = nbinom2,
@@ -864,22 +864,7 @@ inplot_long <- inplot_long %>%
 
 view(inplot_long)
 str(inplot_long)
-species_summary <- inplot_long %>%
-  group_by(Species) %>%
-  summarise(
-    Total_Cover_Score = sum(plot_total_cover, na.rm = TRUE),    # Total cover across all plots (sum of plot_total_cover)
-    Mean_Cover_Score = round(mean(plot_mean_cover[plot_presence == 1], na.rm = TRUE), 2),    # Mean cover per plot (average of plot_mean_cover, excluding plots where species was Non-augmented)
-    Relative_Cover = Total_Cover_Score / sum(Total_Cover_Score),    # Relative cover (proportion of total cover across all species)
-    
-    .groups = "drop"
-  ) %>%
-  # Rename columns for clarity
-  rename(
-    "Species" = Species,
-    "Number of Plots" = Number_of_Plots,
-    "Total Cover Score" = Total_Cover_Score,
-    "Mean Cover Score" = Mean_Cover_Score,
-    "Relative Cover" = Relative_Cover)
+
 # get total quadrat cover of all flowers 
 quadrat_cover <- inplot_long %>%
   group_by(plot_id, column) %>%  # Group by plot and quadrat (column)
@@ -892,10 +877,8 @@ plot_cover <- quadrat_cover %>%
   summarise(p_quadrat_cover = (sum(total_quadrat_cover, na.rm = TRUE)/5))
 
 view(plot_cover)
-str(plot_cover)
-str(merged_data)
 # add to merged data 
-# Remove "P" from plot_id and convert to factor
+# Remove P from plot_id and convert to factor
 plot_cover$plot_id <- gsub("P", "", plot_cover$plot_id)
 plot_cover$plot_id <- as.factor(plot_cover$plot_id)
 
@@ -908,7 +891,7 @@ view(merged_data2)
 wasp_model <- glmmTMB(
   aphidius_colemani ~ p_quadrat_cover + augmentation + margin_distance + 
     (1 | time_point) + (1 | plot_id),
-  family = nbinom2,  # Use nbinom2 if overdispersed, else poisson
+  family = nbinom2, 
   data = merged_data2)
 summary(wasp_model)
 AICc(wasp_model)
@@ -996,9 +979,9 @@ plot_yst <- ggplot() +
     legend.position = "none" ) +
   # Color scale for margin distance (33m = green, 83m = orange)
   scale_color_manual(
-    name = "Margin Distance",
+    name = "Distance from Wildflower Strip (m)",
     values = c("33" = "#1b9e77", "83" = "#DF6D16"), 
-    labels = c("33 m", "83 m") ) +
+    labels = c("33", "83") ) +
   # Shape scale for augmentation (present = circle, absent = triangle)
   scale_shape_manual(
     name = "Augmentation",
@@ -1031,16 +1014,16 @@ plot_infested <- ggplot() +
     legend.position = "none" ) +
   # Color scale for margin distance (33m = green, 83m = orange)
   scale_color_manual(
-    name = "Margin Distance",
+    name = "Distance from Wildflower Strip (m)",
     values = c("33" = "#1b9e77", "83" = "#DF6D16"), 
-    labels = c("33 m", "83 m") ) +
+    labels = c("33", "83") ) +
   # Shape scale for augmentation (present = circle, absent = triangle)
   scale_shape_manual(
     name = "Augmentation",
-    values = c("present" = 16, "absent" = 17),  # 16 = circle, 17 = triangle
-    labels = c("Present", "Absent"))
+    values = c("Augmented" = 16, "Non-augmented" = 17),  # 16 = circle, 17 = triangle
+    labels = c("Augmented", "Non-augmented"))
 plot_infested
-# 3. Combine Plots with Unified Legends ----
+# 3. Combine plots ----
 combined_plots <- plot_wasp / (plot_yst + plot_infested) +
   plot_layout(guides = "collect") +
   plot_annotation(tag_levels = "A") &
@@ -1053,7 +1036,8 @@ combined_plots <- plot_wasp / (plot_yst + plot_infested) +
 
 combined_plots
 
-# Final model outputs  for appendicies ----------
+# Summary model outputs for appendices ----------
+# Models used
 models <- list(
   "RQ1: A. colemani Crop (Augmentation * WFS)" = r1_mod_crop,
   "RQ1: A. colemani YST (Augmentation * WFS)" = r1_mod_yst,
@@ -1080,6 +1064,69 @@ full_table <- left_join(model_table, fit_stats, by = "Model")
 
 # View final table
 View(full_table)
+
+# All trialed models table for appendcies ----
+# RQ1
+# Interactions
+r1_mod_yst <- glmmTMB(
+  aphidius_colemani ~ augmentation * margin_distance + yst_aphids + (1 | plot_id) + (1 | time_point),
+  family = nbinom2,
+  data = merged_data)
+
+r1_mod_crop <- glmmTMB(
+  aphidius_colemani ~ augmentation * margin_distance + sum_infested + (1 | plot_id) + (1 | time_point),
+  family = nbinom2,
+  data = merged_data)
+# No Interactions
+r1_mod_yst_b <- glmmTMB(
+  aphidius_colemani ~ augmentation + margin_distance + yst_aphids + (1 | plot_id) + (1 | time_point),
+  family = nbinom2,
+  data = merged_data)
+
+r1_mod_crop_b <- glmmTMB(
+  aphidius_colemani ~ augmentation + margin_distance + sum_infested + (1 | plot_id) + (1 | time_point),
+  family = nbinom2,
+  data = merged_data)
+# RQ2
+# Interactions 
+r2_mod_crop <- glmmTMB(
+  sum_infested ~ augmentation * margin_distance + aphidius_colemani + (1|time_point)+ (1|plot_id),
+  family = nbinom2,
+  data = merged_data)
+
+r2_mod_yst <- glmmTMB(
+  yst_aphids ~ augmentation * margin_distance  + aphidius_colemani +(1 | plot_id) + (1 | time_point),
+  family = nbinom2,
+  data = merged_data)
+
+# No interactions
+r2_mod_crop_b <- glmmTMB(
+  sum_infested ~ augmentation + margin_distance + aphidius_colemani + (1|time_point)+ (1|plot_id),
+  family = nbinom2,
+  data = merged_data)
+
+r2_mod_yst_b <- glmmTMB(
+  yst_aphids ~ augmentation + margin_distance  + aphidius_colemani +(1 | plot_id) + (1 | time_point),
+  family = nbinom2,
+  data = merged_data)
+
+# RQ3
+# A. colemani response
+wasp_model <- glmmTMB(
+  aphidius_colemani ~ p_quadrat_cover + augmentation + margin_distance + 
+    (1 | time_point) + (1 | plot_id),
+  family = nbinom2, 
+  data = merged_data2)
+# A. fabae YST response
+glmm_yst <- glmmTMB(
+  yst_aphids ~ p_quadrat_cover + augmentation + margin_distance + (1 | time_point) + (1 | plot_id),
+  family = nbinom2,  
+  data = merged_data2)
+# A. fabae in-crop response
+glmm_infested <- glmmTMB(
+  sum_infested ~ p_quadrat_cover + augmentation + margin_distance + (1 | time_point) + (1 | plot_id),
+  family = nbinom2,
+  data = merged_data2)
 # Final Model AICcs ----
 AICc(r1_mod_yst,r1_mod_crop, r2_mod_crop, r2_mod_yst,r3_mod_crop2,r3_mod_yst1, wasp_model,glmm_yst,glmm_infested )
 # Final model diagnostic summary table ----
@@ -1168,10 +1215,10 @@ wfs_long <- wildflower_bb %>%
 
 view(wfs_long)
 
-# calculating wfs species importance values ----
+# calculating wfs species cover per plot ----
 total_cover_sum <- sum(species_summary$total_cover)
 
-species_summary <- wfs_long %>%
+species_summary <- inplot_long %>%
   group_by(Species) %>%
   summarise(
     plots_of_occurrence = n_distinct(quadrat),
@@ -1185,67 +1232,18 @@ species_summary <- wfs_long %>%
     "Number of Plots of Occurrence" = plots_of_occurrence,  
     "Total Cover Score" = total_cover,  # summed Braun-Blanquet MCR
     "Mean cover (%)" = mean_cover)
-#mutate(
-#  percent_frequency = (plots_of_occurrence / max(plots_of_occurrence)) * 100,
-#  relative_frequency = (percent_frequency / sum(percent_frequency)) * 100,
-#  relative_cover = (total_cover / sum(total_cover)) * 100,
-#  importance_value = relative_frequency + relative_cover) %>%
-#  arrange(desc(importance_value))
-# Calculate total cover
 
-View(species_summary)
-# Importance value: Fagopyrum esculentum = 74.74453
-# Importance value: Phacelia tanacetifolia = 62.57908
-# Importance value: Trifolium incarnatum = 21.62633
-# Importance value: Trifolium pratense = 20.69151
-# Importance value: Myosotis sylvatica = 20.35856
 
-# Average Braun-Blanquet (midpoint cover) per species across all 10 WFS quadrats
-wfs_sum_cover <- wfs_long %>%
-  group_by(Species) %>% # i think this might be incorrect but the index value looks much smaller without it
+# Average Braun-Blanquet cover
+plot_sum_cover <- inplot_long %>%
+  group_by(Species) %>% 
   summarise(
-    sum_midpoint_cover = sum(midpoint_cover, na.rm = TRUE),
-    .groups = "drop"
-  )
-
-# Calculate Shannon diversity per plot UNNECCESSARY STUFF!!!!!!!!!!---- 
-inplot_diversity <- inplot_avg %>%
-  group_by(plot_id) %>%
-  summarise(
-    shannon_div = diversity(avg_midpoint_cover, index = "shannon")
-  )
-view(inplot_diversity)
-
-
-
-
-
-
-
-
-
-
-view(plot_wf_data)
-str(plot_wf_data)
-
-plot_metrics <- plot_wf_data %>%
-  group_by(plot_id) %>%
-  summarise(
-    total_cover = sum(mc_scaled, na.rm = TRUE),
-    shannon_div = vegan::diversity(mc_scaled, index = "shannon")
-  )
-
-
-view(plot_metrics)
-
-wfs_pooled <- wfs_long %>%
-  group_by(Species) %>%
-  summarise(
-    total_midpoint_cover = sum(midpoint_cover, na.rm = TRUE),
-    .groups = "drop"
-  )
-
-# Calculate Shannon diversity for the entire WFS (pooled data) (still giving small value)
-wfs_diversity_pooled <- diversity(wfs_pooled$total_midpoint_cover, index = "shannon")
-view(wfs_diversity_pooled)
-t.test(inplot_diversity$shannon_div, mu = wfs_diversity_pooled)
+    sum_midpoint_cover = mean(midpoint_cover, na.rm = TRUE),
+    mean_cover = sum_midpoint_cover/16,
+    .groups = "drop") %>%
+  mutate(across(where(is.numeric), round, 2)) %>%  
+  rename(
+    "Average Intercrop Cover (%)" = sum_midpoint_cover,
+    "Cover Per Plot (%)" = mean_cover)
+view(plot_sum_cover)
+view(inplot_long)
